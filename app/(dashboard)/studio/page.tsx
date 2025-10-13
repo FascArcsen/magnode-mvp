@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, Search, TrendingUp, AlertTriangle, Clock, CheckCircle, ChevronDown } from 'lucide-react';
+import { Search, ChevronDown } from 'lucide-react';
+import AuditLogList from './components/AuditLogList';
 
 interface Case {
   id: string;
@@ -73,7 +74,7 @@ const mockCases: Case[] = [
 ];
 
 export default function StudioPage() {
-  const [activeTab, setActiveTab] = useState<'new' | 'active' | 'history' | 'simulations'>('active');
+  const [activeTab, setActiveTab] = useState<'new' | 'active' | 'history'>('active');
   const [expandedCase, setExpandedCase] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -165,14 +166,6 @@ export default function StudioPage() {
           }`}
         >
           Historial de acciones
-        </button>
-        <button
-          onClick={() => setActiveTab('simulations')}
-          className={`pb-3 px-4 font-medium text-sm transition-colors ${
-            activeTab === 'simulations' ? 'border-b-2 border-orange-500 text-orange-600' : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          Simulaciones
         </button>
       </div>
 
@@ -362,15 +355,8 @@ export default function StudioPage() {
         </div>
       )}
 
-      {/* History & Simulations tabs - similar structure */}
-      {(activeTab === 'history' || activeTab === 'simulations') && (
-        <div className="bg-white rounded-lg border border-gray-200 p-6 text-center">
-          <div className="text-gray-500">
-            {activeTab === 'history' ? 'Historial de acciones' : 'Simulaciones'}
-          </div>
-          <p className="text-sm text-gray-400 mt-2">Contenido en desarrollo</p>
-        </div>
-      )}
+      {/* History - Historial de Acciones */}
+      {activeTab === 'history' && <AuditLogList />}
     </div>
   );
 }

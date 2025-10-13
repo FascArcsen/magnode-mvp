@@ -292,7 +292,7 @@ export const mockDashboardMetrics = {
 };
 
 // ============================================================
-// AUDIT LOG (nuevo módulo de historial de acciones)
+// AUDIT LOG - HISTORIAL DE ACCIONES (EXTENDIDO)
 // ============================================================
 export const mockAuditLogs: AuditLog[] = [
   {
@@ -344,5 +344,142 @@ export const mockAuditLogs: AuditLog[] = [
     target_id: "run-222",
     ts: "2025-10-13T11:05:00Z",
     diff_json: { success: true, cost_estimate: 0.43 }
+  },
+  {
+    audit_id: "audit-006",
+    actor_type: "user",
+    actor_id: "user-001",
+    action: "created",
+    target_table: "Recommendation",
+    target_id: "rec-045",
+    ts: "2025-10-13T11:30:00Z",
+    diff_json: { 
+      type: "process_optimization",
+      expected_impact: { time_reduction: "35%" },
+      priority: "high"
+    }
+  },
+  {
+    audit_id: "audit-007",
+    actor_type: "system",
+    actor_id: "mag-ai",
+    action: "generated",
+    target_table: "Insight",
+    target_id: "ins-010",
+    ts: "2025-10-13T12:15:00Z",
+    diff_json: { 
+      severity: "critical",
+      title: "Cuellos de botella en proceso KYC",
+      affected_dept: "Compliance"
+    }
+  },
+  {
+    audit_id: "audit-008",
+    actor_type: "user",
+    actor_id: "user-003",
+    action: "updated",
+    target_table: "Scenario",
+    target_id: "scn-101",
+    ts: "2025-10-13T13:00:00Z",
+    diff_json: { 
+      status: { old: "draft", new: "active" },
+      approved_by: "user-003"
+    }
+  },
+  {
+    audit_id: "audit-009",
+    actor_type: "system",
+    actor_id: "magnode-engine",
+    action: "executed",
+    target_table: "SimulationRun",
+    target_id: "run-223",
+    ts: "2025-10-13T13:45:00Z",
+    diff_json: { 
+      success: true,
+      duration_seconds: 127,
+      resources_used: { cpu: "2.4 cores", memory: "1.2 GB" }
+    }
+  },
+  {
+    audit_id: "audit-010",
+    actor_type: "user",
+    actor_id: "user-001",
+    action: "created",
+    target_table: "Department",
+    target_id: "dept-010",
+    ts: "2025-10-13T14:20:00Z",
+    diff_json: { 
+      dept_name: "Data Analytics",
+      initial_metrics: ["response_time", "data_quality"]
+    }
+  },
+  {
+    audit_id: "audit-011",
+    actor_type: "system",
+    actor_id: "mag-ai",
+    action: "generated",
+    target_table: "Recommendation",
+    target_id: "rec-046",
+    ts: "2025-10-13T15:00:00Z",
+    diff_json: { 
+      action: "automate_approval_workflow",
+      confidence: 0.89,
+      potential_savings: "$12K/month"
+    }
+  },
+  {
+    audit_id: "audit-012",
+    actor_type: "user",
+    actor_id: "user-002",
+    action: "updated",
+    target_table: "Insight",
+    target_id: "ins-009",
+    ts: "2025-10-13T15:30:00Z",
+    diff_json: { 
+      status: { old: "new", new: "acknowledged" },
+      assigned_to: "user-004"
+    }
+  },
+  {
+    audit_id: "audit-013",
+    actor_type: "system",
+    actor_id: "magnode-engine",
+    action: "executed",
+    target_table: "SimulationRun",
+    target_id: "run-224",
+    ts: "2025-10-13T16:10:00Z",
+    diff_json: { 
+      success: false,
+      error: "Insufficient data for simulation",
+      retry_scheduled: true
+    }
+  },
+  {
+    audit_id: "audit-014",
+    actor_type: "user",
+    actor_id: "user-001",
+    action: "deleted",
+    target_table: "Recommendation",
+    target_id: "rec-042",
+    ts: "2025-10-13T16:45:00Z",
+    diff_json: { 
+      reason: "Recommendation superseded by rec-046",
+      archived: true
+    }
+  },
+  {
+    audit_id: "audit-015",
+    actor_type: "system",
+    actor_id: "mag-ai",
+    action: "generated",
+    target_table: "Insight",
+    target_id: "ins-011",
+    ts: "2025-10-13T17:20:00Z",
+    diff_json: { 
+      severity: "high",
+      title: "Incremento de errores en pagos",
+      trend: "increasing",
+      affected_dept: "Finance"
+    }
   }
 ];
