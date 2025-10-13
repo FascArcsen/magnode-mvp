@@ -1,108 +1,122 @@
 'use client';
 
-import { TrendingUp, AlertCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { mockDashboardMetrics, mockInsights, mockDepartments } from '@/lib/mock-data';
+import { MetricCard, Card, Button, StatusIndicator } from '@/components/ui';
 
 export default function DashboardPage() {
   const metrics = [
-    { label: 'New Customers', value: mockDashboardMetrics.newCustomers, change: '+0.5%' },
-    { label: 'CSAT', value: mockDashboardMetrics.csat, change: '+0.5%' },
-    { label: 'Product Sold', value: mockDashboardMetrics.productSold, change: '+1.2%' },
-    { label: 'Total Order', value: mockDashboardMetrics.totalOrder, change: '+5%' },
-    { label: 'Total Sales', value: `$${mockDashboardMetrics.totalSales}k`, change: '+8%' },
-    { label: 'Fulfillment Rate', value: `${mockDashboardMetrics.fulfillmentRate}`, change: '+8%' },
+    { label: 'New Customers', value: mockDashboardMetrics.newCustomers, change: '+0.5%', changeType: 'positive' as const },
+    { label: 'CSAT', value: mockDashboardMetrics.csat, change: '+0.5%', changeType: 'positive' as const },
+    { label: 'Product Sold', value: mockDashboardMetrics.productSold, change: '+1.2%', changeType: 'positive' as const },
+    { label: 'Total Order', value: mockDashboardMetrics.totalOrder, change: '+5%', changeType: 'positive' as const },
+    { label: 'Total Sales', value: `$${mockDashboardMetrics.totalSales}k`, change: '+8%', changeType: 'positive' as const },
+    { label: 'Fulfillment Rate', value: `${mockDashboardMetrics.fulfillmentRate}`, change: '+8%', changeType: 'positive' as const },
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-section">
+      {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Resumen operativo</h1>
-        <p className="text-sm text-gray-500 mt-1">Overview of your operational performance</p>
+        <h1 className="text-h1 font-syne font-bold text-text-primary">Resumen operativo</h1>
+        <p className="text-sm font-exo text-text-secondary mt-1">Overview of your operational performance</p>
       </div>
 
+      {/* Metrics Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         {metrics.map((metric) => (
-          <div key={metric.label} className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="text-xs text-gray-500 mb-2">{metric.label}</div>
-            <div className="flex items-end justify-between">
-              <div className="text-2xl font-bold text-gray-900">{metric.value}</div>
-              <div className="flex items-center text-xs font-medium text-green-600">
-                <TrendingUp className="w-3 h-3 mr-1" />
-                {metric.change}
-              </div>
-            </div>
-            <div className="text-xs text-gray-400 mt-1">from yesterday</div>
-          </div>
+          <MetricCard
+            key={metric.label}
+            label={metric.label}
+            value={metric.value}
+            change={metric.change}
+            changeType={metric.changeType}
+          />
         ))}
       </div>
 
+      {/* Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200">
-          <div className="p-6 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900">Recomendaciones basadas en tus procesos</h2>
-            <p className="text-sm text-gray-500 mt-1">Critical issues detected</p>
-          </div>
-          <div className="p-6">
-            <div className="space-y-4">
-              {mockInsights.map((insight) => (
-                <div key={insight.insight_id} className="flex items-start gap-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-                  <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h3 className="font-medium text-gray-900">{insight.title}</h3>
-                        <p className="text-sm text-gray-600 mt-1">{insight.detail}</p>
-                      </div>
-                      <span className="px-2 py-1 bg-red-100 text-red-700 text-xs font-medium rounded">
-                        {insight.severity.toUpperCase()}
-                      </span>
-                    </div>
-                    <button className="mt-3 text-sm text-red-600 hover:text-red-700 font-medium">
-                      Ver detalles →
-                    </button>
-                  </div>
-                </div>
-              ))}
+        {/* Recommendations - 2/3 width */}
+        <div className="lg:col-span-2">
+          <Card padding="none" shadow="md">
+            <div className="p-6 border-b border-border">
+              <h2 className="text-h2 font-syne font-bold text-text-primary">Recomendaciones basadas en tus procesos</h2>
+              <p className="text-sm font-exo text-text-secondary mt-1">Critical issues detected</p>
             </div>
-          </div>
+            <div className="p-6">
+              <div className="space-y-4">
+                {mockInsights.map((insight) => (
+                  <div
+                    key={insight.insight_id}
+                    className="flex items-start gap-4 p-4 bg-red-50 border border-red-200 rounded-lg"
+                  >
+                    <AlertCircle className="w-5 h-5 text-status-critical flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h3 className="font-exo font-semibold text-text-primary">{insight.title}</h3>
+                          <p className="text-sm font-exo text-text-secondary mt-1">{insight.detail}</p>
+                        </div>
+                        <StatusIndicator status="critical" size="sm" />
+                      </div>
+                      <Button variant="ghost" size="sm" className="mt-3 text-status-critical hover:text-red-700">
+                        Ver detalles →
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Card>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200">
-          <div className="p-6 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900">Rendimiento por Departamento</h2>
-          </div>
-          <div className="p-6">
-            <div className="space-y-4">
-              {mockDepartments.slice(0, 4).map((dept) => (
-                <div key={dept.dept_id}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-900">{dept.dept_name}</span>
-                    <span className={`text-sm font-semibold ${
-                      dept.status === 'critical' ? 'text-red-600' :
-                      dept.status === 'warning' ? 'text-orange-600' :
-                      'text-green-600'
-                    }`}>
-                      {dept.friction_score}%
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div
-                      className={`h-2 rounded-full ${
-                        dept.status === 'critical' ? 'bg-red-600' :
-                        dept.status === 'warning' ? 'bg-orange-500' :
-                        'bg-green-500'
-                      }`}
-                      style={{ width: `${dept.friction_score}%` }}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between mt-1">
-                    <span className="text-xs text-gray-500">{dept.total_processes} procesos</span>
-                    <span className="text-xs text-gray-500">{dept.critical_processes} críticos</span>
-                  </div>
-                </div>
-              ))}
+        {/* Department Performance - 1/3 width */}
+        <div>
+          <Card padding="none" shadow="md">
+            <div className="p-6 border-b border-border">
+              <h2 className="text-h2 font-syne font-bold text-text-primary">Rendimiento por Departamento</h2>
             </div>
-          </div>
+            <div className="p-6">
+              <div className="space-y-4">
+                {mockDepartments.slice(0, 4).map((dept) => {
+                  // Determinar el color basado en el status
+                  const getStatusColor = (status: string) => {
+                    if (status === 'critical') return 'bg-status-critical';
+                    if (status === 'warning') return 'bg-status-warning';
+                    return 'bg-status-success';
+                  };
+
+                  const getTextColor = (status: string) => {
+                    if (status === 'critical') return 'text-status-critical';
+                    if (status === 'warning') return 'text-status-warning';
+                    return 'text-status-success';
+                  };
+
+                  return (
+                    <div key={dept.dept_id}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-exo font-medium text-text-primary">{dept.dept_name}</span>
+                        <span className={`text-sm font-exo font-bold ${getTextColor(dept.status)}`}>
+                          {dept.friction_score}%
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className={`h-2 rounded-full transition-all ${getStatusColor(dept.status)}`}
+                          style={{ width: `${dept.friction_score}%` }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between mt-1">
+                        <span className="text-xs font-exo text-text-tertiary">{dept.total_processes} procesos</span>
+                        <span className="text-xs font-exo text-text-tertiary">{dept.critical_processes} críticos</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </Card>
         </div>
       </div>
     </div>
