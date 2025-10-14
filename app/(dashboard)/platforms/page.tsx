@@ -1,293 +1,383 @@
-
 'use client';
 
 import { useState } from 'react';
-import { Plus, Settings, RefreshCw, Trash2, CheckCircle, AlertTriangle, Clock } from 'lucide-react';
+import { Plus, RefreshCw, CheckCircle, XCircle, AlertCircle, Trash2, Settings } from 'lucide-react';
 
-interface Platform {
-  id: string;
-  name: string;
-  type: string;
-  status: 'connected' | 'error' | 'syncing';
-  connected_at: string;
-  last_sync: string;
-  last_sync_result: 'success' | 'error' | 'slow';
-}
-
-const mockPlatforms: Platform[] = [
+// Mock data - en producción vendría de la BD
+const mockConnections = [
   {
-    id: 'plt-001',
-    name: 'Hubspot CRM',
-    type: 'CRM / Ventas',
-    status: 'connected',
-    connected_at: 'Aug 12, 2025',
-    last_sync: 'hace 5 min',
-    last_sync_result: 'success'
+    connection_id: 'conn-001',
+    platform_name: 'Google Sheets',
+    platform_type: 'pre_built',
+    status: 'active',
+    last_sync_at: '2025-10-14T10:30:00Z',
+    total_records_synced: 1247,
+    created_at: '2025-10-01T00:00:00Z'
   },
   {
-    id: 'plt-002',
-    name: 'Slack',
-    type: 'Comunicación',
-    status: 'connected',
-    connected_at: 'Aug 10, 2025',
-    last_sync: 'hace 2 min',
-    last_sync_result: 'success'
+    connection_id: 'conn-002',
+    platform_name: 'Internal CRM',
+    platform_type: 'universal',
+    status: 'active',
+    last_sync_at: '2025-10-14T09:15:00Z',
+    total_records_synced: 3891,
+    created_at: '2025-10-05T00:00:00Z'
   },
   {
-    id: 'plt-003',
-    name: 'Jira',
-    type: 'Gestión de Proyectos',
+    connection_id: 'conn-003',
+    platform_name: 'Slack Workspace',
+    platform_type: 'pre_built',
     status: 'error',
-    connected_at: 'Aug 15, 2025',
-    last_sync: 'hace 5 min',
-    last_sync_result: 'error'
-  },
-  {
-    id: 'plt-004',
-    name: 'Appian',
-    type: 'BPM / Automatización',
-    status: 'connected',
-    connected_at: 'Aug 08, 2025',
-    last_sync: 'hace 1h 23min',
-    last_sync_result: 'slow'
+    last_sync_at: '2025-10-13T18:45:00Z',
+    total_records_synced: 542,
+    error_message: 'Authentication failed',
+    created_at: '2025-09-28T00:00:00Z'
   }
 ];
 
-const syncHistory = [
-  { platform: 'Hubspot', last_sync: '1h 23min', result: 'success', id: 'sync-1' },
-  { platform: 'Jira', last_sync: '5 min', result: 'error', id: 'sync-2' },
-  { platform: 'Slack', last_sync: '15 min', result: 'success', id: 'sync-3' },
-  { platform: 'Appian', last_sync: '2h 10min', result: 'slow', id: 'sync-4' },
-];
+type ConnectionWizardStep = 'select' | 'configure' | 'map' | 'test' | 'complete';
 
 export default function PlatformsPage() {
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [formData, setFormData] = useState({
-    name: '',
-    type: '',
-    apiKey: ''
-  });
+  const [connections, setConnections] = useState(mockConnections);
+  const [showWizard, setShowWizard] = useState(false);
+  const [wizardStep, setWizardStep] = useState<ConnectionWizardStep>('select');
+  const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'connected':
-        return <CheckCircle className="w-5 h-5 text-green-500" />;
+      case 'active':
+        return <CheckCircle className="w-5 h-5 text-green-600" />;
       case 'error':
-        return <AlertTriangle className="w-5 h-5 text-red-500" />;
-      case 'syncing':
-        return <Clock className="w-5 h-5 text-blue-500 animate-spin" />;
+        return <XCircle className="w-5 h-5 text-red-600" />;
       default:
-        return null;
+        return <AlertCircle className="w-5 h-5 text-yellow-600" />;
     }
   };
 
-  const getSyncResultBadge = (result: string) => {
-    switch (result) {
-      case 'success':
-        return <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-700 rounded">Éxito</span>;
-      case 'error':
-        return <span className="px-2 py-1 text-xs font-medium bg-red-100 text-red-700 rounded">Fallo</span>;
-      case 'slow':
-        return <span className="px-2 py-1 text-xs font-medium bg-orange-100 text-orange-700 rounded">Lento</span>;
+  const getPlatformBadgeColor = (type: string) => {
+    switch (type) {
+      case 'pre_built':
+        return 'bg-blue-100 text-blue-700 border-blue-200';
+      case 'universal':
+        return 'bg-purple-100 text-purple-700 border-purple-200';
+      case 'llm_assisted':
+        return 'bg-orange-100 text-orange-700 border-orange-200';
       default:
-        return null;
+        return 'bg-gray-100 text-gray-700 border-gray-200';
     }
+  };
+
+  const formatDate = (iso: string) => {
+    const date = new Date(iso);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
+    return `${Math.floor(diffMins / 1440)}d ago`;
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="p-8">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Plataformas</h1>
-          <p className="text-sm text-gray-500 mt-1">Gestiona tus integraciones de plataformas</p>
+          <h1 className="text-3xl font-bold text-gray-900">Platforms</h1>
+          <p className="text-gray-600 mt-1">
+            Connect your tools and data sources to MagNode
+          </p>
         </div>
+        
         <button
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
+          onClick={() => setShowWizard(true)}
+          className="flex items-center gap-2 bg-orange-500 text-white px-6 py-3 rounded-lg font-semibold hover:bg-orange-600 transition-colors"
         >
-          <Plus className="w-4 h-4" />
-          Agregar Plataforma
+          <Plus className="w-5 h-5" />
+          Add Platform
         </button>
       </div>
 
-      {/* Connected Platforms */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h2 className="text-lg font-bold text-gray-900 mb-4">
-          Plataformas conectadas ({mockPlatforms.length}/4)
-        </h2>
+      {/* Stats */}
+      <div className="grid grid-cols-4 gap-6 mb-8">
+        <div className="bg-white border border-gray-200 rounded-lg p-6">
+          <div className="text-sm text-gray-600 mb-1">Total Platforms</div>
+          <div className="text-3xl font-bold text-gray-900">{connections.length}</div>
+        </div>
         
-        <div className="grid grid-cols-2 gap-4">
-          {mockPlatforms.map((platform) => (
-            <div
-              key={platform.id}
-              className={`border rounded-lg p-4 ${
-                platform.status === 'error' ? 'border-red-200 bg-red-50' : 'border-gray-200'
-              }`}
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  {getStatusIcon(platform.status)}
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{platform.name}</h3>
-                    <p className="text-xs text-gray-500">{platform.type}</p>
+        <div className="bg-white border border-gray-200 rounded-lg p-6">
+          <div className="text-sm text-gray-600 mb-1">Active</div>
+          <div className="text-3xl font-bold text-green-600">
+            {connections.filter(c => c.status === 'active').length}
+          </div>
+        </div>
+        
+        <div className="bg-white border border-gray-200 rounded-lg p-6">
+          <div className="text-sm text-gray-600 mb-1">Errors</div>
+          <div className="text-3xl font-bold text-red-600">
+            {connections.filter(c => c.status === 'error').length}
+          </div>
+        </div>
+        
+        <div className="bg-white border border-gray-200 rounded-lg p-6">
+          <div className="text-sm text-gray-600 mb-1">Total Records</div>
+          <div className="text-3xl font-bold text-gray-900">
+            {connections.reduce((sum, c) => sum + c.total_records_synced, 0).toLocaleString()}
+          </div>
+        </div>
+      </div>
+
+      {/* Connections List */}
+      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-900">Connected Platforms</h2>
+        </div>
+        
+        <div className="divide-y divide-gray-200">
+          {connections.map(conn => (
+            <div key={conn.connection_id} className="px-6 py-4 hover:bg-gray-50 transition-colors">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4 flex-1">
+                  {getStatusIcon(conn.status)}
+                  
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3">
+                      <h3 className="font-semibold text-gray-900">{conn.platform_name}</h3>
+                      <span className={`px-2 py-0.5 text-xs font-medium border rounded ${getPlatformBadgeColor(conn.platform_type)}`}>
+                        {conn.platform_type.replace('_', ' ').toUpperCase()}
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center gap-4 mt-1 text-sm text-gray-600">
+                      <span>Last sync: {formatDate(conn.last_sync_at)}</span>
+                      <span>•</span>
+                      <span>{conn.total_records_synced.toLocaleString()} records</span>
+                      {conn.error_message && (
+                        <>
+                          <span>•</span>
+                          <span className="text-red-600">{conn.error_message}</span>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <div className="flex gap-1">
-                  <button className="p-1.5 hover:bg-gray-100 rounded transition-colors">
-                    <Settings className="w-4 h-4 text-gray-600" />
+                
+                <div className="flex items-center gap-2">
+                  <button className="p-2 text-gray-600 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors">
+                    <RefreshCw className="w-4 h-4" />
                   </button>
-                  <button className="p-1.5 hover:bg-gray-100 rounded transition-colors">
-                    <RefreshCw className="w-4 h-4 text-gray-600" />
+                  <button className="p-2 text-gray-600 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors">
+                    <Settings className="w-4 h-4" />
                   </button>
-                  <button className="p-1.5 hover:bg-red-100 rounded transition-colors">
-                    <Trash2 className="w-4 h-4 text-red-600" />
+                  <button className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors">
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               </div>
-
-              <div className="space-y-1 text-xs text-gray-600">
-                <div className="flex justify-between">
-                  <span>Estado:</span>
-                  <span className={`font-medium ${
-                    platform.status === 'connected' ? 'text-green-600' :
-                    platform.status === 'error' ? 'text-red-600' : 'text-blue-600'
-                  }`}>
-                    {platform.status === 'connected' ? 'Conectado' :
-                     platform.status === 'error' ? 'Requiere Atención' : 'Sincronizando'}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Fecha de conexión:</span>
-                  <span>{platform.connected_at}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Última sincronización:</span>
-                  <span>{platform.last_sync}</span>
-                </div>
-              </div>
-
-              {platform.status === 'error' && (
-                <div className="mt-3 pt-3 border-t border-red-200">
-                  <button className="w-full text-xs text-red-700 font-medium hover:text-red-800">
-                    Ver detalles del error →
-                  </button>
-                </div>
-              )}
             </div>
           ))}
         </div>
       </div>
 
-      {/* Sync History */}
-      <div className="bg-white rounded-lg border border-gray-200">
-        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-gray-900">Historial de sincronizaciones</h2>
-          <button className="text-sm text-orange-600 hover:text-orange-700 font-medium">
-            Ver todas →
-          </button>
-        </div>
-        
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Plataforma</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Última Sync</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Resultado</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Detalles</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {syncHistory.map((item) => (
-                <tr key={item.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 text-sm font-medium text-gray-900">{item.platform}</td>
-                  <td className="px-6 py-4 text-sm text-gray-500">{item.last_sync}</td>
-                  <td className="px-6 py-4">{getSyncResultBadge(item.result)}</td>
-                  <td className="px-6 py-4">
-                    <button className="text-sm text-orange-600 hover:text-orange-700">
-                      Ver log
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Add Platform Modal */}
-      {showAddModal && (
+      {/* Add Platform Wizard Modal */}
+      {showWizard && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-lg w-full">
-            <div className="p-6 border-b border-gray-200">
-              <h2 className="text-xl font-bold text-gray-900">Agregar Nueva Plataforma</h2>
-            </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  ID de plataforma (Asignado automáticamente)
-                </label>
-                <input
-                  type="text"
-                  disabled
-                  value="Generado automáticamente"
-                  className="w-full border border-gray-300 rounded-lg p-3 text-sm bg-gray-50"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Nombre de la plataforma
-                </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg p-3 text-sm"
-                  placeholder="Ej: HubSpot, Slack, Jira..."
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Platform Type
-                </label>
-                <select
-                  value={formData.type}
-                  onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg p-3 text-sm"
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            {/* Wizard Header */}
+            <div className="px-8 py-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-bold text-gray-900">Add Platform</h2>
+                <button
+                  onClick={() => setShowWizard(false)}
+                  className="text-gray-400 hover:text-gray-600"
                 >
-                  <option value="">Selecciona un tipo...</option>
-                  <option value="crm">CRM / Ventas</option>
-                  <option value="communication">Comunicación</option>
-                  <option value="project">Gestión de Proyectos</option>
-                  <option value="bpm">BPM / Automatización</option>
-                  <option value="analytics">Analytics</option>
-                </select>
+                  <XCircle className="w-6 h-6" />
+                </button>
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  API Key
-                </label>
-                <input
-                  type="password"
-                  value={formData.apiKey}
-                  onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg p-3 text-sm"
-                  placeholder="Ingresa tu API key..."
-                />
+              
+              {/* Progress Steps */}
+              <div className="flex items-center gap-2 mt-6">
+                {['select', 'configure', 'map', 'test', 'complete'].map((step, i) => (
+                  <div key={step} className="flex items-center flex-1">
+                    <div className={`flex items-center justify-center w-8 h-8 rounded-full font-semibold ${
+                      wizardStep === step
+                        ? 'bg-orange-500 text-white'
+                        : i < ['select', 'configure', 'map', 'test', 'complete'].indexOf(wizardStep)
+                        ? 'bg-green-500 text-white'
+                        : 'bg-gray-200 text-gray-600'
+                    }`}>
+                      {i + 1}
+                    </div>
+                    {i < 4 && (
+                      <div className={`flex-1 h-1 mx-2 ${
+                        i < ['select', 'configure', 'map', 'test', 'complete'].indexOf(wizardStep)
+                          ? 'bg-green-500'
+                          : 'bg-gray-200'
+                      }`} />
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
-            <div className="p-6 border-t border-gray-200 flex gap-3">
+
+            {/* Wizard Content */}
+            <div className="px-8 py-6">
+              {wizardStep === 'select' && (
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-4">Select Platform Type</h3>
+                  
+                  <div className="grid grid-cols-3 gap-4">
+                    {/* Pre-built Connectors */}
+                    <button
+                      onClick={() => {
+                        setSelectedPlatform('pre_built');
+                        setWizardStep('configure');
+                      }}
+                      className="border-2 border-gray-200 rounded-lg p-6 hover:border-orange-500 hover:bg-orange-50 transition-all text-left"
+                    >
+                      <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
+                        <CheckCircle className="w-6 h-6 text-blue-600" />
+                      </div>
+                      <h4 className="font-semibold text-gray-900 mb-2">Pre-built Connectors</h4>
+                      <p className="text-sm text-gray-600">
+                        Connect to popular platforms like Google Sheets, Slack, GitHub with one click
+                      </p>
+                    </button>
+
+                    {/* Universal API */}
+                    <button
+                      onClick={() => {
+                        setSelectedPlatform('universal');
+                        setWizardStep('configure');
+                      }}
+                      className="border-2 border-gray-200 rounded-lg p-6 hover:border-orange-500 hover:bg-orange-50 transition-all text-left"
+                    >
+                      <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
+                        <Settings className="w-6 h-6 text-purple-600" />
+                      </div>
+                      <h4 className="font-semibold text-gray-900 mb-2">Universal API</h4>
+                      <p className="text-sm text-gray-600">
+                        Configure any REST API manually with full control over mapping and sync
+                      </p>
+                    </button>
+
+                    {/* LLM Assisted */}
+                    <button
+                      onClick={() => {
+                        setSelectedPlatform('llm_assisted');
+                        setWizardStep('configure');
+                      }}
+                      className="border-2 border-orange-300 rounded-lg p-6 hover:border-orange-500 hover:bg-orange-50 transition-all text-left relative overflow-hidden"
+                    >
+                      <div className="absolute top-2 right-2 bg-orange-500 text-white text-xs px-2 py-1 rounded font-semibold">
+                        AI
+                      </div>
+                      <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center mb-4">
+                        <AlertCircle className="w-6 h-6 text-orange-600" />
+                      </div>
+                      <h4 className="font-semibold text-gray-900 mb-2">LLM Assisted</h4>
+                      <p className="text-sm text-gray-600">
+                        Paste API docs and let AI configure everything automatically
+                      </p>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {wizardStep === 'configure' && (
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-4">
+                    {selectedPlatform === 'llm_assisted' ? 'Paste API Documentation' : 'Configure Connection'}
+                  </h3>
+                  
+                  {selectedPlatform === 'llm_assisted' ? (
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          API Base URL *
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="https://api.example.com/v1"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          API Documentation (Optional)
+                        </label>
+                        <textarea
+                          rows={8}
+                          placeholder="Paste your API documentation here... or provide a URL to the docs"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Sample API Response (Optional)
+                        </label>
+                        <textarea
+                          rows={6}
+                          placeholder='{"events": [{"id": "123", "user": "john@example.com", ...}]}'
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono text-sm"
+                        />
+                      </div>
+
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <p className="text-sm text-blue-800">
+                          💡 Our AI will analyze your API and automatically suggest the best configuration for extracting user actions and events.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-12 text-gray-600">
+                      Configuration form for {selectedPlatform} will appear here
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {wizardStep === 'test' && (
+                <div className="text-center py-12">
+                  <RefreshCw className="w-16 h-16 text-orange-500 mx-auto mb-4 animate-spin" />
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">Testing Connection</h3>
+                  <p className="text-gray-600">Verifying credentials and fetching sample data...</p>
+                </div>
+              )}
+            </div>
+
+            {/* Wizard Footer */}
+            <div className="px-8 py-4 border-t border-gray-200 flex justify-between">
               <button
-                onClick={() => setShowAddModal(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                onClick={() => {
+                  if (wizardStep === 'select') {
+                    setShowWizard(false);
+                  } else {
+                    const steps: ConnectionWizardStep[] = ['select', 'configure', 'map', 'test', 'complete'];
+                    const currentIndex = steps.indexOf(wizardStep);
+                    setWizardStep(steps[currentIndex - 1]);
+                  }
+                }}
+                className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50"
               >
-                Cancelar
+                Back
               </button>
-              <button className="flex-1 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors">
-                Conectar Plataforma
+              
+              <button
+                onClick={() => {
+                  const steps: ConnectionWizardStep[] = ['select', 'configure', 'map', 'test', 'complete'];
+                  const currentIndex = steps.indexOf(wizardStep);
+                  if (currentIndex < steps.length - 1) {
+                    setWizardStep(steps[currentIndex + 1]);
+                  } else {
+                    setShowWizard(false);
+                  }
+                }}
+                className="px-6 py-2 bg-orange-500 text-white rounded-lg font-semibold hover:bg-orange-600"
+              >
+                {wizardStep === 'complete' ? 'Finish' : 'Continue'}
               </button>
             </div>
           </div>
