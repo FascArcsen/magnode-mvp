@@ -1,208 +1,144 @@
-// Generated from ERD schema
-export interface Organization {
-  org_id: string;
-  name: string;
-  industry_code: string;
-  country_code: string;
-  created_at: string;
-  updated_at: string;
-}
+// lib/mock-data.ts - Mock data for MagNode MVP
+export const mockOrganization = {
+  org_id: 'org-001',
+  org_name: 'TechCorp Inc.',
+  industry: 'Technology',
+  size: '150-200 employees',
+  created_at: '2024-01-01T00:00:00Z'
+};
 
-export interface Department {
-  dept_id: string;
-  org_id: string;
-  dept_name: string;
-  created_at: string;
-  updated_at: string;
-}
+// ==========================================
+// PLATFORM CONNECTIONS
+// ==========================================
 
-export interface User {
-  user_id: string;
-  org_id: string;
-  email: string;
-  name: string;
-  status_code: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface Role {
-  role_code: string;
-  name: string;
-  description: string;
-}
-
-export interface UserRole {
-  user_id: string;
-  role_code: string;
-  scope_org_id: string;
-  scope_dept_id?: string;
-  granted_at: string;
-}
-
-export interface Platform {
-  platform_id: string;
-  platform_name: string;
-  category_code: string;
-  website_url: string;
-}
-
-export interface DeptIntegration {
-  integration_id: string;
-  dept_id: string;
-  platform_id: string;
-  auth_type: string;
-  vault_secret_ref: string;
-  scopes: string;
-  connected_at: string;
-  status_code: string;
-  last_health_check_at: string;
-  rate_limit_hint: number;
-}
-
-export interface ProcessEvent {
-  event_id: string;
-  org_id: string;
-  dept_id: string;
-  integration_id: string;
-  process_key: string;
-  case_id: string;
-  step: string;
-  actor_type: string;
-  event_ts: string;
-  payload_json: Record<string, any>;
-  ingest_at: string;
-}
-
-export interface MetricDefinition {
-  metric_code: string;
-  name: string;
-  definition_sql_or_json: string;
-  unit_code: string;
-  window: string;
-  threshold_warn: number;
-  threshold_crit: number;
-  owner_user_id: string;
-  is_primary: boolean;
-  valid_from: string;
-  valid_to?: string;
-}
-
-export interface MetricValue {
-  metric_value_id: string;
-  metric_code: string;
-  org_id: string;
-  dept_id: string;
-  ts: string;
-  value: number;
-  source_run_id?: string;
-}
-
-export interface Scenario {
-  scenario_id: string;
-  org_id: string;
-  dept_id?: string;
-  name: string;
-  hypothesis_json: Record<string, any>;
-  created_by: string;
-  created_at: string;
-  status_code: string;
-}
-
-export interface SimulationRun {
-  run_id: string;
-  scenario_id: string;
-  started_at: string;
-  ended_at?: string;
-  engine: string;
-  params_json: Record<string, any>;
-  result_json?: Record<string, any>;
-  success: boolean;
-  p_success: number;
-  cost_estimate: number;
-}
-
-export interface Insight {
-  insight_id: string;
-  org_id: string;
-  dept_id?: string;
-  source_run_id?: string;
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  title: string;
-  detail: string;
-  metric_code?: string;
-  created_at: string;
-}
-
-export interface Recommendation {
-  rec_id: string;
-  insight_id: string;
-  type_code: string;
-  action_json: Record<string, any>;
-  expected_impact: Record<string, any>;
-  p_success: number;
-  created_at: string;
-}
-
-export interface Action {
-  action_id: string;
-  rec_id: string;
-  action_type: string;
-  target_ref: string;
-  applied_by: string;
-  applied_at: string;
-  status_code: string;
-  rollback_ref?: string;
-}
-
-export interface Recipe {
-  recipe_id: string;
-  sector_code: string;
-  dept_template_json: Record<string, any>;
-  default_metrics_json: Record<string, any>;
-  default_panels_json: Record<string, any>;
-  min_required_integrations_json: Record<string, any>;
-  valid_from: string;
-  valid_to?: string;
-}
-
-export interface Playbook {
-  playbook_id: string;
-  title: string;
-  steps_json: Record<string, any>;
-  owner_role: string;
-  est_effort_hours: number;
-  valid_from: string;
-  valid_to?: string;
-}
-
-export interface AuditLog {
-  audit_id: string;
-  actor_type: string;
-  actor_id: string;
-  action: string;
-  target_table: string;
-  target_id: string;
-  ts: string;
-  diff_json: Record<string, any>;
-}
-
-// Extended types for frontend use
-export interface DepartmentWithMetrics extends Department {
-  friction_score: number;
-  total_processes: number;
-  critical_processes: number;
-  status: 'healthy' | 'warning' | 'critical';
-}
-
-export interface ProcessSummary {
-  process_key: string;
-  name: string;
-  from_dept: string;
-  to_dept: string;
-  avg_time_hours: number;
-  handoff_count: number;
-  completion_rate: number;
-  status: 'healthy' | 'warning' | 'critical';
-  user_complaint?: string;
-}
+export const mockPlatformConnections = [
+  {
+    connection_id: 'conn-001',
+    org_id: 'org-001',
+    platform_type: 'pre_built' as const,
+    platform_name: 'Google Sheets',
+    platform_display_name: 'Activity Tracker Sheet',
+    auth_config: {
+      type: 'bearer' as const,
+      credentials: { token: 'mock_token_123' }
+    },
+    connector_config: {
+      connector_type: 'google_sheets' as const,
+      settings: {
+        spreadsheet_id: '1abc123',
+        sheet_name: 'Activity Log',
+        header_row: 1,
+        columns: {
+          id_column: 'ID',
+          timestamp_column: 'Timestamp',
+          actor_column: 'User Email',
+          action_column: 'Action Type',
+          department_column: 'Department'
+        }
+      }
+    },
+    status: 'active' as const,
+    last_sync_at: '2025-10-14T10:30:00Z',
+    last_sync_status: 'success' as const,
+    next_sync_at: '2025-10-14T11:30:00Z',
+    sync_frequency_minutes: 60,
+    total_records_synced: 1247,
+    total_audit_logs_created: 1247,
+    created_at: '2025-10-01T00:00:00Z',
+    updated_at: '2025-10-14T10:30:00Z'
+  },
+  {
+    connection_id: 'conn-002',
+    org_id: 'org-001',
+    platform_type: 'universal' as const,
+    platform_name: 'Internal CRM',
+    platform_display_name: 'SalesPro CRM',
+    auth_config: {
+      type: 'api_key' as const,
+      credentials: { api_key: 'sk_test_xyz789' }
+    },
+    connector_config: {
+      base_url: 'https://api.salespro.internal',
+      endpoints: [
+        {
+          endpoint_id: 'deals_endpoint',
+          name: 'Deal Activities',
+          path: '/v1/activities',
+          method: 'GET' as const,
+          response_data_path: '$.data',
+          pagination: {
+            type: 'offset' as const,
+            page_param: 'offset',
+            size_param: 'limit',
+            page_size: 100,
+            max_pages: 50
+          }
+        }
+      ],
+      data_mapping: {
+        required_fields: {
+          id: { source_path: '$.id', data_type: 'string' as const, required: true },
+          timestamp: { source_path: '$.created_at', data_type: 'date' as const, required: true },
+          actor: { source_path: '$.user.email', data_type: 'string' as const, required: true },
+          action: { source_path: '$.activity_type', data_type: 'string' as const, required: true }
+        }
+      }
+    },
+    status: 'active' as const,
+    last_sync_at: '2025-10-14T09:15:00Z',
+    last_sync_status: 'success' as const,
+    next_sync_at: '2025-10-14T10:15:00Z',
+    sync_frequency_minutes: 60,
+    total_records_synced: 3891,
+    total_audit_logs_created: 3891,
+    created_at: '2025-10-05T00:00:00Z',
+    updated_at: '2025-10-14T09:15:00Z'
+  },
+  {
+    connection_id: 'conn-003',
+    org_id: 'org-001',
+    platform_type: 'llm_assisted' as const,
+    platform_name: 'ProjectHub API',
+    platform_display_name: 'Project Management Hub',
+    auth_config: {
+      type: 'bearer' as const,
+      credentials: { token: 'Bearer_abc456' }
+    },
+    connector_config: {
+      base_url: 'https://api.projecthub.com',
+      endpoints: [
+        {
+          endpoint_id: 'tasks_endpoint',
+          name: 'Task Events',
+          path: '/api/v2/events',
+          method: 'GET' as const,
+          response_data_path: '$.events',
+          pagination: {
+            type: 'cursor' as const,
+            cursor_param: 'cursor',
+            cursor_path: '$.meta.next_cursor',
+            page_size: 50,
+            max_pages: 100
+          }
+        }
+      ],
+      data_mapping: {
+        required_fields: {
+          id: { source_path: '$.event_id', data_type: 'string' as const, required: true },
+          timestamp: { source_path: '$.timestamp', data_type: 'date' as const, required: true },
+          actor: { source_path: '$.actor.email', data_type: 'string' as const, required: true },
+          action: { source_path: '$.action', data_type: 'string' as const, required: true }
+        }
+      }
+    },
+    status: 'error' as const,
+    last_sync_at: '2025-10-13T18:45:00Z',
+    last_sync_status: 'failed' as const,
+    error_message: 'Authentication token expired',
+    sync_frequency_minutes: 30,
+    total_records_synced: 542,
+    total_audit_logs_created: 542,
+    created_at: '2025-09-28T00:00:00Z',
+    updated_at: '2025-10-13T18:45:00Z'
+  }
+];

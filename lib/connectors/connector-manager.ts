@@ -8,7 +8,7 @@ import type {
   DataPreview,
   LLMAssistedConfig
 } from "@/types/connectors";
-import { AuditLog } from "@/types/database";
+import type { AuditLog } from '@/types';
 import { UniversalConnector } from "./universal-connector";
 import { GoogleSheetsConnector } from "./google-sheets-connector";
 import { LLMConfigGenerator } from "./llm-config-generator";
