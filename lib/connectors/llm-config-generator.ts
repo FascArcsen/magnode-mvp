@@ -2,7 +2,7 @@ import type {
   UniversalAPIConfig,
   LLMAssistedConfig,
   DataMapping
-} from '@/lib/types/connectors';
+} from '@/types/connectors';
 
 // ==========================================
 // LLM CONFIG GENERATOR

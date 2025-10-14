@@ -8,8 +8,8 @@ import type {
   ConnectionTestResult,
   FieldTransform,
   FieldValidation
-}from '@/types/connectors';
-import type { AuditLog } from '@/app/types';
+} from '@/types/connectors';
+import type { AuditLog } from '@/types/database';
 import * as jp from 'jsonpath';
 
 // ==========================================
@@ -384,16 +384,13 @@ export class UniversalConnector {
 
     return {
       audit_id: `audit_${this.connectionId}_${id}`,
-      org_id: 'org-001',
-      actor_id: String(actor),
       actor_type: 'user',
-      action_type: String(action),
-      target_type: target ? 'resource' : undefined,
-      target_id: target ? String(target) : undefined,
-      dept_id: department ? String(department) : undefined,
-      metadata: metadata || record,
-      timestamp: new Date(timestamp).toISOString(),
-      created_at: new Date().toISOString()
+      actor_id: String(actor),
+      action: String(action),
+      target_table: target ? 'resource' : 'unknown',
+      target_id: target ? String(target) : 'unknown',
+      ts: new Date(timestamp).toISOString(),
+      diff_json: metadata || record
     };
   }
 

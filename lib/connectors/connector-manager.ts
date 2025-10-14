@@ -7,11 +7,11 @@ import type {
   ConnectionTestResult,
   DataPreview,
   LLMAssistedConfig
-}from '@/types/connectors';
-import { AuditLog } from '@/lib/types';
-import { UniversalConnector } from './universal-connector';
-import { GoogleSheetsConnector } from './google-sheets-connector';
-import { LLMConfigGenerator } from './llm-config-generator';
+} from "@/types/connectors";
+import { AuditLog } from "@/types/database";
+import { UniversalConnector } from "./universal-connector";
+import { GoogleSheetsConnector } from "./google-sheets-connector";
+import { LLMConfigGenerator } from "./llm-config-generator";
 
 // ==========================================
 // CONNECTOR MANAGER
@@ -44,12 +44,12 @@ export class ConnectorManager {
     since?: Date
   ): Promise<SyncResult> {
     const startTime = Date.now();
-    
+
     const syncResult: SyncResult = {
       sync_id: `sync_${Date.now()}`,
       connection_id: connectionId,
       started_at: new Date().toISOString(),
-      status: 'running',
+      status: "running",
       stats: {
         endpoints_synced: 0,
         total_records_fetched: 0,
@@ -62,11 +62,12 @@ export class ConnectorManager {
 
     try {
       const connector = this.getConnector(connection);
-      
+
       // Fetch raw data
       const rawData = await connector.fetchData(since);
       syncResult.stats.total_records_fetched = rawData.reduce(
-        (sum, raw) => sum + (Array.isArray(raw.raw_payload) ? raw.raw_payload.length : 0),
+        (sum: number, raw: { raw_payload?: any[] }) =>
+          sum + (Array.isArray(raw.raw_payload) ? raw.raw_payload.length : 0),
         0
       );
 
@@ -79,17 +80,19 @@ export class ConnectorManager {
       // TODO: Save auditLogs to database
 
       // Count errors
-      const errors = rawData.flatMap(raw => raw.processing_errors || []);
+      const errors = rawData.flatMap(
+        (raw: { processing_errors?: any[] }) => raw.processing_errors || []
+      );
       syncResult.stats.errors_count = errors.length;
-      syncResult.errors = errors.map(err => ({
+      syncResult.errors = errors.map((err: any) => ({
         error_id: err.error_id,
         error_type: err.error_type,
         error_message: err.error_message,
         occurred_at: err.occurred_at,
-        retryable: err.error_type !== 'validation'
+        retryable: err.error_type !== "validation"
       }));
 
-      syncResult.status = errors.length === 0 ? 'completed' : 'partial';
+      syncResult.status = errors.length === 0 ? "completed" : "partial";
       syncResult.completed_at = new Date().toISOString();
       syncResult.duration_ms = Date.now() - startTime;
 
@@ -100,16 +103,18 @@ export class ConnectorManager {
 
       return syncResult;
     } catch (error: any) {
-      syncResult.status = 'failed';
+      syncResult.status = "failed";
       syncResult.completed_at = new Date().toISOString();
       syncResult.duration_ms = Date.now() - startTime;
-      syncResult.errors = [{
-        error_id: `err_${Date.now()}`,
-        error_type: 'unknown',
-        error_message: error.message,
-        occurred_at: new Date().toISOString(),
-        retryable: true
-      }];
+      syncResult.errors = [
+        {
+          error_id: `err_${Date.now()}`,
+          error_type: "unknown",
+          error_message: error.message,
+          occurred_at: new Date().toISOString(),
+          retryable: true
+        }
+      ];
       syncResult.stats.errors_count = 1;
 
       return syncResult;
@@ -120,22 +125,23 @@ export class ConnectorManager {
   // PREVIEW DATA (for configuration)
   // ==========================================
 
-  async previewData(
-    connection: PlatformConnection,
-    limit: number = 10
-  ): Promise<DataPreview> {
+  async previewData(connection: PlatformConnection, limit: number = 10): Promise<DataPreview> {
     const connector = this.getConnector(connection);
-    
-    if (connection.platform_type === 'pre_built' && 
-        (connection.connector_config as PreBuiltConfig).connector_type === 'google_sheets') {
+
+    if (
+      connection.platform_type === "pre_built" &&
+      (connection.connector_config as PreBuiltConfig).connector_type === "google_sheets"
+    ) {
       return (connector as GoogleSheetsConnector).fetchPreview(limit);
     }
 
     // For universal connectors, fetch and transform
     const rawData = await connector.fetchData();
-    const records = rawData.flatMap(raw => 
-      Array.isArray(raw.raw_payload) ? raw.raw_payload : []
-    ).slice(0, limit);
+    const records = rawData
+      .flatMap((raw: { raw_payload?: any[] }) =>
+        Array.isArray(raw.raw_payload) ? raw.raw_payload : []
+      )
+      .slice(0, limit);
 
     if (records.length === 0) {
       return {
@@ -147,12 +153,14 @@ export class ConnectorManager {
 
     // Detect fields
     const allKeys = new Set<string>();
-    records.forEach(record => {
-      Object.keys(record).forEach(key => allKeys.add(key));
+    records.forEach((record: Record<string, unknown>) => {
+      Object.keys(record).forEach((key: string) => allKeys.add(key));
     });
 
-    const detectedFields = Array.from(allKeys).map(key => {
-      const values = records.map(r => r[key]).filter(v => v !== null && v !== undefined);
+    const detectedFields = Array.from(allKeys).map((key: string) => {
+      const values = records
+        .map((r: Record<string, unknown>) => r[key])
+        .filter((v: unknown) => v !== null && v !== undefined);
       return {
         field_name: key,
         data_type: this.detectDataType(values),
@@ -201,11 +209,11 @@ export class ConnectorManager {
     return {
       connection_id: `conn_${Date.now()}`,
       org_id: orgId,
-      platform_type: 'llm_assisted',
+      platform_type: "llm_assisted",
       platform_name: this.extractPlatformName(llmConfig.suggested_config.base_url),
       auth_config: authConfig,
       connector_config: llmConfig.suggested_config,
-      status: 'testing',
+      status: "testing",
       sync_frequency_minutes: 60,
       total_records_synced: 0,
       total_audit_logs_created: 0,
@@ -218,23 +226,14 @@ export class ConnectorManager {
   // BATCH SYNC (for scheduled jobs)
   // ==========================================
 
-  async syncAllConnections(
-    connections: PlatformConnection[]
-  ): Promise<SyncResult[]> {
+  async syncAllConnections(connections: PlatformConnection[]): Promise<SyncResult[]> {
     const results: SyncResult[] = [];
 
     for (const connection of connections) {
-      if (connection.status !== 'active') {
-        continue;
-      }
-
-      // Check if it's time to sync
-      if (connection.next_sync_at && new Date(connection.next_sync_at) > new Date()) {
-        continue;
-      }
+      if (connection.status !== "active") continue;
+      if (connection.next_sync_at && new Date(connection.next_sync_at) > new Date()) continue;
 
       try {
-        // Incremental sync: only fetch data since last sync
         const since = connection.last_sync_at ? new Date(connection.last_sync_at) : undefined;
         const result = await this.syncConnection(connection.connection_id, connection, since);
         results.push(result);
@@ -245,7 +244,7 @@ export class ConnectorManager {
           connection_id: connection.connection_id,
           started_at: new Date().toISOString(),
           completed_at: new Date().toISOString(),
-          status: 'failed',
+          status: "failed",
           stats: {
             endpoints_synced: 0,
             total_records_fetched: 0,
@@ -253,13 +252,15 @@ export class ConnectorManager {
             audit_logs_created: 0,
             errors_count: 1
           },
-          errors: [{
-            error_id: `err_${Date.now()}`,
-            error_type: 'unknown',
-            error_message: error.message,
-            occurred_at: new Date().toISOString(),
-            retryable: true
-          }]
+          errors: [
+            {
+              error_id: `err_${Date.now()}`,
+              error_type: "unknown",
+              error_message: error.message,
+              occurred_at: new Date().toISOString(),
+              retryable: true
+            }
+          ]
         });
       }
     }
@@ -274,21 +275,16 @@ export class ConnectorManager {
   private getConnector(connection: PlatformConnection): any {
     const { platform_type, connector_config, auth_config, connection_id } = connection;
 
-    if (platform_type === 'pre_built') {
+    if (platform_type === "pre_built") {
       const preBuiltConfig = connector_config as PreBuiltConfig;
-      
+
       switch (preBuiltConfig.connector_type) {
-        case 'google_sheets':
+        case "google_sheets":
           return new GoogleSheetsConnector(preBuiltConfig, auth_config, connection_id);
-        
-        // Add more pre-built connectors here
-        // case 'slack':
-        //   return new SlackConnector(preBuiltConfig, auth_config, connection_id);
-        
         default:
           throw new Error(`Unknown pre-built connector: ${preBuiltConfig.connector_type}`);
       }
-    } else if (platform_type === 'universal' || platform_type === 'llm_assisted') {
+    } else if (platform_type === "universal" || platform_type === "llm_assisted") {
       const universalConfig = connector_config as UniversalAPIConfig;
       return new UniversalConnector(universalConfig, auth_config, connection_id);
     } else {
@@ -300,36 +296,33 @@ export class ConnectorManager {
   // UTILITIES
   // ==========================================
 
-  private detectDataType(values: any[]): string {
-    if (values.length === 0) return 'string';
-    
+  private detectDataType(values: unknown[]): string {
+    if (values.length === 0) return "string";
+
     const sample = values[0];
-    
-    if (typeof sample === 'number') return 'number';
-    if (typeof sample === 'boolean') return 'boolean';
-    if (typeof sample === 'object') return 'object';
-    
-    // Check if it's a date
-    if (typeof sample === 'string') {
+
+    if (typeof sample === "number") return "number";
+    if (typeof sample === "boolean") return "boolean";
+    if (typeof sample === "object") return "object";
+
+    if (typeof sample === "string") {
       const date = new Date(sample);
-      if (!isNaN(date.getTime()) && sample.includes('-')) {
-        return 'date';
+      if (!isNaN(date.getTime()) && sample.includes("-")) {
+        return "date";
       }
     }
 
-    return 'string';
+    return "string";
   }
 
   private extractPlatformName(baseUrl: string): string {
     try {
       const url = new URL(baseUrl);
       const hostname = url.hostname;
-      
-      // Remove www. and extract main domain
-      const parts = hostname.replace('www.', '').split('.');
+      const parts = hostname.replace("www.", "").split(".");
       return parts.length > 1 ? parts[parts.length - 2] : parts[0];
     } catch {
-      return 'Custom API';
+      return "Custom API";
     }
   }
 
@@ -340,29 +333,26 @@ export class ConnectorManager {
   validateConfig(config: UniversalAPIConfig): { valid: boolean; errors: string[] } {
     const errors: string[] = [];
 
-    if (!config.base_url) {
-      errors.push('base_url is required');
-    }
-
-    if (!config.endpoints || config.endpoints.length === 0) {
-      errors.push('At least one endpoint is required');
-    }
+    if (!config.base_url) errors.push("base_url is required");
+    if (!config.endpoints || config.endpoints.length === 0)
+      errors.push("At least one endpoint is required");
 
     config.endpoints?.forEach((endpoint, i) => {
-      if (!endpoint.path) {
-        errors.push(`Endpoint ${i}: path is required`);
-      }
-      if (!endpoint.response_data_path) {
+      if (!endpoint.path) errors.push(`Endpoint ${i}: path is required`);
+      if (!endpoint.response_data_path)
         errors.push(`Endpoint ${i}: response_data_path is required`);
-      }
     });
 
     if (!config.data_mapping) {
-      errors.push('data_mapping is required');
+      errors.push("data_mapping is required");
     } else {
-      const required = ['id', 'timestamp', 'actor', 'action'];
-      required.forEach(field => {
-        if (!config.data_mapping.required_fields?.[field as keyof typeof config.data_mapping.required_fields]) {
+      const required = ["id", "timestamp", "actor", "action"];
+      required.forEach((field) => {
+        if (
+          !config.data_mapping.required_fields?.[
+            field as keyof typeof config.data_mapping.required_fields
+          ]
+        ) {
           errors.push(`data_mapping.required_fields.${field} is required`);
         }
       });

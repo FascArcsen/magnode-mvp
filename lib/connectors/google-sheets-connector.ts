@@ -5,7 +5,7 @@ import type {
   ConnectionTestResult,
   DataPreview
 } from '@/types/connectors';
-import type { AuditLog } from '@/types';
+import type { AuditLog } from '@/types/database';
 
 // ==========================================
 // GOOGLE SHEETS CONNECTOR
@@ -264,16 +264,13 @@ export class GoogleSheetsConnector {
 
     return {
       audit_id: `audit_sheets_${id}`,
-      org_id: 'org-001',
-      actor_id: String(actor),
       actor_type: 'user',
-      action_type: String(action),
-      target_type: target ? 'resource' : undefined,
-      target_id: target ? String(target) : undefined,
-      dept_id: department ? String(department) : undefined,
-      metadata: Object.keys(metadata).length > 0 ? metadata : row,
-      timestamp: new Date(timestamp).toISOString(),
-      created_at: new Date().toISOString()
+      actor_id: String(actor),
+      action: String(action),
+      target_table: target ? 'resource' : 'unknown',
+      target_id: target ? String(target) : 'unknown',
+      ts: new Date(timestamp).toISOString(),
+      diff_json: Object.keys(metadata).length > 0 ? metadata : row
     };
   }
 
