@@ -10,7 +10,7 @@ import type {
   FieldValidation
 } from '@/types/connectors';
 import type { AuditLog } from '@/types/database';
-import * as jp from 'jsonpath';
+import { JSONPath } from 'jsonpath-plus';
 
 // ==========================================
 // UNIVERSAL CONNECTOR - El corazón del sistema
@@ -211,7 +211,7 @@ export class UniversalConnector {
 
       // Handle cursor pagination
       if (pagination.type === 'cursor' && pagination.cursor_path) {
-        const nextCursor = jp.query(response, pagination.cursor_path)[0];
+        const nextCursor = JSONPath({ path: pagination.cursor_path, json: response })[0];
         if (!nextCursor) {
           hasMore = false;
         } else {
@@ -321,7 +321,7 @@ export class UniversalConnector {
     }
 
     try {
-      const extracted = jp.query(response, dataPath);
+      const extracted = JSONPath({ path: dataPath, json: response });
       return Array.isArray(extracted[0]) ? extracted[0] : extracted;
     } catch (error: unknown) {
       console.error('Error extracting data with JSONPath:', error);
@@ -401,7 +401,7 @@ export class UniversalConnector {
   private extractField(record: any, mapping: FieldMapping): any {
     try {
       // Extract using JSONPath
-      let value = jp.query(record, mapping.source_path)[0];
+      let value = JSONPath({ path: mapping.source_path, json: record })[0];
 
       // Use default if not found
       if (value === undefined || value === null) {
