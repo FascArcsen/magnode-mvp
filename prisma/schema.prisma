@@ -1,0 +1,71 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model platform_connections {
+  connection_id            String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  org_id                   String
+  platform_type            String
+  platform_name            String
+  auth_config              Json?
+  connector_config         Json?
+  status                   String?   @default("inactive")
+  last_sync_at             DateTime? @db.Timestamptz(6)
+  next_sync_at             DateTime? @db.Timestamptz(6)
+  sync_frequency_minutes   Int?      @default(60)
+  total_records_synced     Int?      @default(0)
+  total_audit_logs_created Int?      @default(0)
+  error_message            String?
+  created_at               DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime? @default(now()) @updatedAt @db.Timestamptz(6)
+}
+
+model raw_platform_data {
+  raw_data_id         String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  connection_id       String?   @db.Uuid
+  endpoint_id         String
+  raw_payload         Json
+  extracted_at        DateTime? @default(now()) @db.Timestamptz(6)
+  processed           Boolean?  @default(false)
+  mapped_to_audit_log Boolean?  @default(false)
+  audit_log_ids       String[]  @db.Uuid
+  processing_errors   Json?
+  created_at          DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime? @default(now()) @updatedAt @db.Timestamptz(6)
+}
+
+model sync_results {
+  sync_id       String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  connection_id String?   @db.Uuid
+  started_at    DateTime? @default(now()) @db.Timestamptz(6)
+  completed_at  DateTime? @db.Timestamptz(6)
+  duration_ms   Int?
+  status        String?   @default("pending")
+  stats         Json?
+  errors        Json?
+  created_at    DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime? @default(now()) @updatedAt @db.Timestamptz(6)
+}
+
+model llm_assisted_configs {
+  config_id         String   @id @default(uuid())
+  connection_id     String?
+  input             String
+  suggested_config  Json?
+  confidence_score  Float?
+  warnings          Json?
+  suggestions       Json?
+  status            String?  @default("draft")
+  user_approved     Boolean  @default(false)
+  llm_model         String?
+  prompt_tokens     Int?
+  completion_tokens Int?
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+}
