@@ -2,6 +2,7 @@
 // TEST API - Prueba completa del sistema de sincronización
 // ==========================================
 
+
 const API_BASE = 'http://localhost:3000/api/platforms';
 
 interface PlatformConnection {
@@ -44,7 +45,7 @@ async function runCompleteTest() {
     const testConnection = {
       org_id: 'org-test-001',
       platform_type: 'universal',
-      platform_name: 'Test API',
+      platform_name: `Test API ${Date.now()}`, 
       auth_config: {
         type: 'api_key',
         credentials: {
@@ -91,6 +92,45 @@ async function runCompleteTest() {
     connectionId = createdConnection.connection_id;
 
     console.log(`✅ Conexión creada: ${connectionId}\n`);
+
+    // ==========================================
+// Paso 1.5: Guardado y validación de tokens (Slack y Google)
+// ==========================================
+console.log('🔐 Paso 1.5: Probando guardado de tokens (Slack y Google)...');
+
+const providers = ['slack', 'google'];
+
+for (const provider of providers) {
+  console.log(`➡️ Guardando tokens de prueba para ${provider.toUpperCase()}...`);
+
+  const fakeTokens = {
+    access_token: `${provider}-access-token-123`,
+    refresh_token: `${provider}-refresh-token-456`,
+    expires_in: 3600,
+  };
+
+  const tokenSaveResponse = await fetch(`${API_BASE}/oauth/save-tokens`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      org_id: testConnection.org_id,
+      provider,
+      tokens: fakeTokens,
+    }),
+  });
+
+  if (!tokenSaveResponse.ok) {
+    const errorText = await tokenSaveResponse.text();
+    throw new Error(`Error al guardar tokens para ${provider}: ${errorText}`);
+  }
+
+  const tokenResult = await tokenSaveResponse.json();
+  console.log(`✅ ${tokenResult.message}`);
+}
+
+// Espera breve para garantizar escritura en BD
+await new Promise(resolve => setTimeout(resolve, 1500));
+console.log('\n✅ Tokens de prueba guardados exitosamente en la base de datos.\n');
 
     // ==========================================
     // Paso 2: Activar conexión automáticamente
