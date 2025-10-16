@@ -1,69 +1,95 @@
-// app/api/platforms/oauth/[provider]/callback/route.ts
 import { NextResponse } from "next/server";
 import OAuthManager from "@/lib/oauth/oauth-manager";
 
-const TOKEN_URLS: Record<string, string> = {
-  slack: "https://slack.com/api/oauth.v2.access",
-  google: "https://oauth2.googleapis.com/token",
-};
-
-export async function GET(req: Request, { params }: { params: { provider: string } }) {
-  const { provider } = params;
-  const url = new URL(req.url);
-  const code = url.searchParams.get("code");
-  const org_id = url.searchParams.get("state") || "org-test-001"; // 'state' viene del authorize
-
-  if (!code) {
-    return NextResponse.json({ success: false, error: "Missing authorization code" }, { status: 400 });
-  }
-
+export async function GET(
+  req: Request,
+  context: { params: Promise<{ provider: string }> }
+) {
   try {
-    const tokenUrl = TOKEN_URLS[provider];
-    if (!tokenUrl) throw new Error("Unsupported provider");
+    // Esperar el provider (Google, Slack, etc.)
+    const { provider } = await context.params;
+    const url = new URL(req.url);
 
-    let tokenBody: URLSearchParams;
+    // Leer los parámetros enviados por Google
+    const code = url.searchParams.get("code");
+    const state = url.searchParams.get("state") || "org-test-001";
 
-    if (provider === "slack") {
-      tokenBody = new URLSearchParams({
-        code,
-        client_id: process.env.SLACK_CLIENT_ID!,
-        client_secret: process.env.SLACK_CLIENT_SECRET!,
-        redirect_uri: "http://localhost:3000/api/platforms/oauth/slack/callback",
-      });
-    } else if (provider === "google") {
-      tokenBody = new URLSearchParams({
-        code,
+    if (!code) {
+      return NextResponse.json(
+        { success: false, error: "Missing authorization code" },
+        { status: 400 }
+      );
+    }
+
+    // Configuración del proveedor
+    const PROVIDER_CONFIGS: Record<string, any> = {
+      google: {
+        token_url: "https://oauth2.googleapis.com/token",
         client_id: process.env.GOOGLE_CLIENT_ID!,
         client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-        redirect_uri: "http://localhost:3000/api/platforms/oauth/google/callback",
-        grant_type: "authorization_code",
-      });
-    } else {
-      throw new Error(`Unsupported provider: ${provider}`);
+        redirect_uri:
+          "https://orange-train-rqg9gxr6x4xhx5xg-3000.app.github.dev/api/platforms/oauth/google/callback",
+      },
+      slack: {
+        token_url: "https://slack.com/api/oauth.v2.access",
+        client_id: process.env.SLACK_CLIENT_ID!,
+        client_secret: process.env.SLACK_CLIENT_SECRET!,
+        redirect_uri:
+          "https://orange-train-rqg9gxr6x4xhx5xg-3000.app.github.dev/api/platforms/oauth/slack/callback",
+      },
+    };
+
+    const config = PROVIDER_CONFIGS[provider];
+    if (!config) {
+      return NextResponse.json(
+        { success: false, error: `Unknown provider: ${provider}` },
+        { status: 400 }
+      );
     }
 
-    const response = await fetch(tokenUrl, {
+    // Intercambiar el código por los tokens
+    const tokenResponse = await fetch(config.token_url, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: tokenBody.toString(),
+      body: new URLSearchParams({
+        code,
+        client_id: config.client_id,
+        client_secret: config.client_secret,
+        redirect_uri: config.redirect_uri,
+        grant_type: "authorization_code",
+      }),
     });
 
-    const data = await response.json();
+    const tokenData = await tokenResponse.json();
 
-    if (!response.ok || data.error) {
-      throw new Error(data.error_description || data.error || "Failed to get tokens");
+    if (!tokenResponse.ok) {
+      console.error("❌ Token exchange failed:", tokenData);
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            tokenData.error_description ||
+            tokenData.error ||
+            "Failed to obtain tokens",
+        },
+        { status: 400 }
+      );
     }
 
-    // Guarda tokens cifrados en tu BD
-    await OAuthManager.saveTokensToDB(provider as "slack" | "google", org_id, data);
+    // Guardar tokens en base de datos
+    await OAuthManager.saveTokensToDB(provider, state, tokenData);
 
+    console.log("✅ Tokens guardados para", provider);
     return NextResponse.json({
       success: true,
-      message: `Tokens for ${provider} saved successfully`,
-      data,
+      message: `Tokens saved successfully for ${provider}`,
+      tokens: tokenData,
     });
   } catch (error: any) {
-    console.error("OAuth callback error:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    console.error("⚠️ OAuth callback error:", error);
+    return NextResponse.json(
+      { success: false, error: error.message },
+      { status: 500 }
+    );
   }
 }
