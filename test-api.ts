@@ -37,7 +37,7 @@ async function runCompleteTest() {
   let connectionId: string | undefined;
 
   try {
-    // ==========================================
+    // ==========================================v
     // Paso 1: Crear conexión de prueba
     // ==========================================
     console.log('📦 Paso 1: Creando conexión de prueba...');
@@ -110,14 +110,14 @@ for (const provider of providers) {
   };
 
   const tokenSaveResponse = await fetch(`${API_BASE}/oauth/save-tokens`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      org_id: testConnection.org_id,
-      provider,
-      tokens: fakeTokens,
-    }),
-  });
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    org_id: testConnection.org_id,
+    provider,
+    tokens: fakeTokens,
+  }),
+});
 
   if (!tokenSaveResponse.ok) {
     const errorText = await tokenSaveResponse.text();

@@ -1,43 +1,66 @@
 import { NextResponse } from "next/server";
+import { OAUTH_PROVIDERS, OAuthProviderKey } from "@/config/oauth-providers";
 
-const PROVIDER_CONFIGS: Record<string, any> = {
-  google: {
-    auth_url: "https://accounts.google.com/o/oauth2/v2/auth",
-    client_id: process.env.GOOGLE_CLIENT_ID!,
-    redirect_uri:
-      "https://orange-train-rqg9gxr6x4xhx5xg-3000.app.github.dev/api/platforms/oauth/google/callback",
-    scope:
-      "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive.metadata.readonly",
-    access_type: "offline",
-    response_type: "code",
-    prompt: "consent",
-  },
-};
-
+/**
+ * Genera la URL de autorización OAuth dinámica
+ */
 export async function GET(
   req: Request,
-  context: { params: Promise<{ provider: string }> }
+  context: { params: { provider: string } }
 ) {
-  // 🔹 Aquí estaba el error: antes usábamos params directo, ahora lo "await-eamos"
-  const { provider } = await context.params;
+  const { provider } = context.params;
 
-  const config = PROVIDER_CONFIGS[provider];
-  if (!config) {
+  if (!(provider in OAUTH_PROVIDERS)) {
     return NextResponse.json(
       { error: `Unsupported provider: ${provider}` },
       { status: 400 }
     );
   }
 
-  // 🔹 Construimos la URL hacia Google OAuth
+  const config = OAUTH_PROVIDERS[provider as OAuthProviderKey];
+
+  // ✅ Detectar dominio base dinámico
+  const rawHost =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    req.headers.get("x-forwarded-host") ||
+    req.headers.get("host") ||
+    "localhost:3000";
+
+  const baseUrl = rawHost.startsWith("http")
+    ? rawHost
+    : `https://${rawHost}`;
+
+  // ✅ Crear state seguro
+  const state = Buffer.from(
+    JSON.stringify({
+      org_id: "org-test-001",
+      provider,
+      timestamp: Date.now(),
+      nonce: Math.random().toString(36).substring(2, 10),
+    })
+  ).toString("base64");
+
+  // ✅ Construir URL de autorización
   const authUrl = new URL(config.auth_url);
   authUrl.searchParams.set("client_id", config.client_id);
-  authUrl.searchParams.set("redirect_uri", config.redirect_uri);
-  authUrl.searchParams.set("response_type", config.response_type);
-  authUrl.searchParams.set("scope", config.scope);
-  authUrl.searchParams.set("access_type", config.access_type);
-  authUrl.searchParams.set("prompt", config.prompt);
+  authUrl.searchParams.set(
+    "redirect_uri",
+    `${baseUrl}/api/platforms/oauth/${provider}/callback`
+  );
+  authUrl.searchParams.set("response_type", "code");
+  authUrl.searchParams.set("scope", config.scopes.join(" "));
+  authUrl.searchParams.set("state", state);
 
-  // 🔹 Redirigimos al usuario a Google
+  // ⚙️ Ajustes extra para Google
+  if (provider === "google") {
+    authUrl.searchParams.set("access_type", "offline");
+    authUrl.searchParams.set("prompt", "consent");
+  }
+
+  console.log("🔗 Redirecting to OAuth provider:", {
+    provider,
+    redirect_uri: `${baseUrl}/api/platforms/oauth/${provider}/callback`,
+  });
+
   return NextResponse.redirect(authUrl.toString());
 }

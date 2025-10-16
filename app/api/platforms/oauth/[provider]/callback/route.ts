@@ -1,53 +1,82 @@
 import { NextResponse } from "next/server";
+import { OAUTH_PROVIDERS, OAuthProviderKey } from "@/config/oauth-providers";
 import OAuthManager from "@/lib/oauth/oauth-manager";
 
+/**
+ * Maneja el callback de OAuth después de la autorización
+ */
 export async function GET(
   req: Request,
-  context: { params: Promise<{ provider: string }> }
+  context: { params: { provider: string } }
 ) {
   try {
-    // Esperar el provider (Google, Slack, etc.)
-    const { provider } = await context.params;
+    const { provider } = context.params;
     const url = new URL(req.url);
 
-    // Leer los parámetros enviados por Google
+    console.log("📥 OAuth Callback received:", {
+      provider,
+      has_code: !!url.searchParams.get("code"),
+      has_error: !!url.searchParams.get("error"),
+      full_url: url.toString(),
+    });
+
+    // 🧩 Manejar errores del proveedor
+    const oauthError = url.searchParams.get("error");
+    if (oauthError) {
+      const description = url.searchParams.get("error_description") || "Unknown error";
+      console.error("❌ OAuth Error:", oauthError, description);
+
+      return NextResponse.redirect(
+        `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/platforms?error=${oauthError}&desc=${encodeURIComponent(
+          description
+        )}`
+      );
+    }
+
     const code = url.searchParams.get("code");
-    const state = url.searchParams.get("state") || "org-test-001";
+    const state = url.searchParams.get("state");
 
     if (!code) {
-      return NextResponse.json(
-        { success: false, error: "Missing authorization code" },
-        { status: 400 }
+      console.error("❌ Missing authorization code");
+      return NextResponse.redirect(
+        `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/platforms?error=missing_code`
       );
     }
 
-    // Configuración del proveedor
-    const PROVIDER_CONFIGS: Record<string, any> = {
-      google: {
-        token_url: "https://oauth2.googleapis.com/token",
-        client_id: process.env.GOOGLE_CLIENT_ID!,
-        client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-        redirect_uri:
-          "https://orange-train-rqg9gxr6x4xhx5xg-3000.app.github.dev/api/platforms/oauth/google/callback",
-      },
-      slack: {
-        token_url: "https://slack.com/api/oauth.v2.access",
-        client_id: process.env.SLACK_CLIENT_ID!,
-        client_secret: process.env.SLACK_CLIENT_SECRET!,
-        redirect_uri:
-          "https://orange-train-rqg9gxr6x4xhx5xg-3000.app.github.dev/api/platforms/oauth/slack/callback",
-      },
-    };
-
-    const config = PROVIDER_CONFIGS[provider];
-    if (!config) {
-      return NextResponse.json(
-        { success: false, error: `Unknown provider: ${provider}` },
-        { status: 400 }
+    if (!(provider in OAUTH_PROVIDERS)) {
+      console.error("❌ Unknown provider:", provider);
+      return NextResponse.redirect(
+        `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/platforms?error=unknown_provider`
       );
     }
 
-    // Intercambiar el código por los tokens
+    const config = OAUTH_PROVIDERS[provider as OAuthProviderKey];
+
+    // ✅ Decodificar state
+    let org_id = "org-test-001";
+    if (state) {
+      try {
+        const parsed = JSON.parse(Buffer.from(state, "base64").toString());
+        org_id = parsed.org_id || org_id;
+        console.log("✅ State decoded:", parsed);
+      } catch {
+        console.warn("⚠️ Failed to parse state; using default org_id");
+      }
+    }
+
+    // ✅ Detectar dominio base dinámico
+    const rawHost =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      req.headers.get("x-forwarded-host") ||
+      req.headers.get("host") ||
+      "localhost:3000";
+    const baseUrl = rawHost.startsWith("http")
+      ? rawHost
+      : `https://${rawHost}`;
+
+    console.log("🔄 Exchanging code for tokens...");
+
+    // ✅ Intercambiar código por tokens
     const tokenResponse = await fetch(config.token_url, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -55,7 +84,7 @@ export async function GET(
         code,
         client_id: config.client_id,
         client_secret: config.client_secret,
-        redirect_uri: config.redirect_uri,
+        redirect_uri: `${baseUrl}/api/platforms/oauth/${provider}/callback`,
         grant_type: "authorization_code",
       }),
     });
@@ -64,32 +93,30 @@ export async function GET(
 
     if (!tokenResponse.ok) {
       console.error("❌ Token exchange failed:", tokenData);
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            tokenData.error_description ||
-            tokenData.error ||
-            "Failed to obtain tokens",
-        },
-        { status: 400 }
+      return NextResponse.redirect(
+        `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/platforms?error=token_exchange_failed&details=${encodeURIComponent(
+          JSON.stringify(tokenData)
+        )}`
       );
     }
 
-    // Guardar tokens en base de datos
-    await OAuthManager.saveTokensToDB(provider, state, tokenData);
+    console.log("✅ Tokens received, saving to DB...");
+    await OAuthManager.saveTokensToDB(
+      provider as OAuthProviderKey,
+      org_id,
+      tokenData
+    );
 
-    console.log("✅ Tokens guardados para", provider);
-    return NextResponse.json({
-      success: true,
-      message: `Tokens saved successfully for ${provider}`,
-      tokens: tokenData,
-    });
+    console.log("✅ OAuth flow completed successfully for", provider);
+    return NextResponse.redirect(
+      `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/platforms?connected=${provider}`
+    );
   } catch (error: any) {
     console.error("⚠️ OAuth callback error:", error);
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
+    return NextResponse.redirect(
+      `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/platforms?error=${encodeURIComponent(
+        error.message
+      )}`
     );
   }
 }
