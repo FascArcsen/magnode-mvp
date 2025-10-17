@@ -12,6 +12,7 @@ import type { AuditLog } from '@/types/database';
 import { UniversalConnector } from "./universal-connector";
 import { GoogleSheetsConnector } from "./google-sheets-connector";
 import { LLMConfigGenerator } from "./llm-config-generator";
+import { SlackConnector } from "@/lib/connectors/slack-connector";
 
 // ==========================================
 // CONNECTOR MANAGER
@@ -272,25 +273,38 @@ export class ConnectorManager {
   // CONNECTOR FACTORY
   // ==========================================
 
-  private getConnector(connection: PlatformConnection): any {
-    const { platform_type, connector_config, auth_config, connection_id } = connection;
+private getConnector(connection: PlatformConnection): any {
+  const { platform_type, connector_config, auth_config, connection_id } = connection;
 
-    if (platform_type === "pre_built") {
-      const preBuiltConfig = connector_config as PreBuiltConfig;
+  if (platform_type === "pre_built") {
+    const preBuiltConfig = connector_config as PreBuiltConfig;
 
-      switch (preBuiltConfig.connector_type) {
-        case "google_sheets":
-          return new GoogleSheetsConnector(preBuiltConfig, auth_config, connection_id);
-        default:
-          throw new Error(`Unknown pre-built connector: ${preBuiltConfig.connector_type}`);
-      }
-    } else if (platform_type === "universal" || platform_type === "llm_assisted") {
-      const universalConfig = connector_config as UniversalAPIConfig;
-      return new UniversalConnector(universalConfig, auth_config, connection_id);
-    } else {
-      throw new Error(`Unknown platform type: ${platform_type}`);
+    switch (preBuiltConfig.connector_type) {
+      // 📊 Google Sheets
+      case "google_sheets":
+        return new GoogleSheetsConnector(preBuiltConfig, auth_config, connection_id);
+
+      // 💬 Slack
+      case "slack":
+        return new SlackConnector(preBuiltConfig, auth_config, connection_id);
+
+      // ⚠️ Cualquier otro pre-built
+      default:
+        throw new Error(`Unknown pre-built connector: ${preBuiltConfig.connector_type}`);
     }
   }
+
+  // 🌐 Universal or LLM-assisted connectors
+  else if (platform_type === "universal" || platform_type === "llm_assisted") {
+    const universalConfig = connector_config as UniversalAPIConfig;
+    return new UniversalConnector(universalConfig, auth_config, connection_id);
+  }
+
+  // 🚨 Error si el tipo de plataforma no coincide
+  else {
+    throw new Error(`Unknown platform type: ${platform_type}`);
+  }
+}
 
   // ==========================================
   // UTILITIES

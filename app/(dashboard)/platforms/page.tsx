@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 
 // =========================================
-// 🔹 INTERFACE & TYPES
+// 🔹 INTERFACES
 // =========================================
 interface PlatformConnection {
   connection_id: string;
@@ -37,26 +37,27 @@ export default function PlatformsPage() {
   const [showWizard, setShowWizard] = useState(false);
   const [wizardStep, setWizardStep] = useState<ConnectionWizardStep>('select');
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
+  const [syncingId, setSyncingId] = useState<string | null>(null);
 
   // =========================================
-  // 🔸 CARGA DE CONEXIONES REALES DESDE LA API
+  // 🔸 CARGA DE CONEXIONES
   // =========================================
-  useEffect(() => {
-    async function loadConnections() {
-      try {
-        setLoading(true);
-        const res = await fetch('/api/platforms?org_id=org-001'); // ✅ Usa el ID correcto
-        const data = await res.json();
+  const loadConnections = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch('/api/platforms?org_id=org-001');
+      const data = await res.json();
 
-        if (!res.ok) throw new Error(data.error || 'Failed to fetch connections');
-        setConnections(data.data || []);
-      } catch (err) {
-        console.error('❌ Error loading connections:', err);
-      } finally {
-        setLoading(false);
-      }
+      if (!res.ok) throw new Error(data.error || 'Failed to fetch connections');
+      setConnections(data.data || []);
+    } catch (err) {
+      console.error('❌ Error loading connections:', err);
+    } finally {
+      setLoading(false);
     }
+  };
 
+  useEffect(() => {
     loadConnections();
 
     const params = new URLSearchParams(window.location.search);
@@ -64,12 +65,12 @@ export default function PlatformsPage() {
     if (connected) {
       alert(`✅ ${connected.toUpperCase()} connected successfully!`);
       window.history.replaceState({}, document.title, window.location.pathname);
-      loadConnections(); // 🔁 Recarga conexiones al volver del OAuth
+      loadConnections();
     }
   }, []);
 
   // =========================================
-  // 🔸 ICONOS Y ESTILOS
+  // 🔸 UTILIDADES VISUALES
   // =========================================
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -107,7 +108,7 @@ export default function PlatformsPage() {
   };
 
   // =========================================
-  // 🔸 ACCIONES (DELETE / REFRESH)
+  // 🔸 ACCIONES
   // =========================================
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to remove this connection?')) return;
@@ -121,9 +122,25 @@ export default function PlatformsPage() {
     }
   };
 
-  const handleRefresh = async (id: string) => {
-    alert(`🔄 Sync triggered for connection: ${id}`);
-    // Aquí más adelante conectaremos /api/platforms/sync
+  const handleSync = async (id: string) => {
+    try {
+      setSyncingId(id);
+      const res = await fetch(`/api/platforms/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ connection_id: id, incremental: true }),
+      });
+
+      const result = await res.json();
+      if (!result.success) throw new Error(result.error || 'Sync failed');
+
+      alert('✅ Sync completed successfully!');
+      loadConnections();
+    } catch (err: any) {
+      alert(`❌ Sync failed: ${err.message}`);
+    } finally {
+      setSyncingId(null);
+    }
   };
 
   // =========================================
@@ -247,14 +264,21 @@ export default function PlatformsPage() {
 
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => handleRefresh(conn.connection_id)}
+                    onClick={() => handleSync(conn.connection_id)}
                     className="p-2 text-gray-600 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors"
+                    disabled={syncingId === conn.connection_id}
                   >
-                    <RefreshCw className="w-4 h-4" />
+                    {syncingId === conn.connection_id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4" />
+                    )}
                   </button>
+
                   <button className="p-2 text-gray-600 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors">
                     <Settings className="w-4 h-4" />
                   </button>
+
                   <button
                     onClick={() => handleDelete(conn.connection_id)}
                     className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
@@ -281,12 +305,11 @@ export default function PlatformsPage() {
                 <XCircle className="w-6 h-6" />
               </button>
             </div>
-
-            {/* Wizard steps remain identical */}
-            {/* (no cambios aquí por ahora; solo backend conectado) */}
+            {/* Aquí luego integras el wizard real */}
           </div>
         </div>
       )}
     </div>
   );
 }
+
