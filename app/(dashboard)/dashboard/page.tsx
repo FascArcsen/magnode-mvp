@@ -1,76 +1,61 @@
 'use client';
 
-import { TrendingUp, Users, Activity, Clock } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { PlusCircle, LayoutDashboard } from 'lucide-react';
 
-export default function Dashboard() {
+export default function DashboardList() {
+  const [dashboards, setDashboards] = useState([]);
+
+  useEffect(() => {
+    fetch('/api/dashboard')
+      .then(res => res.json())
+      .then(setDashboards);
+  }, []);
+
+  const createDashboard = async () => {
+    const title = prompt('Nombre del nuevo dashboard:');
+    if (!title) return;
+    const res = await fetch('/api/dashboard', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    });
+    const newDashboard = await res.json();
+    setDashboards(prev => [newDashboard, ...prev]);
+  };
+
   return (
     <section className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900">
-          Resumen operativo
-        </h1>
-        <p className="text-sm text-gray-500">
-          Vista general del rendimiento operativo de tu organización.
-        </p>
-      </div>
-
-      {/* KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="card flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-500">Nuevos clientes</span>
-            <Users className="w-4 h-4 text-orange-500" />
-          </div>
-          <h2 className="text-2xl font-semibold">8</h2>
-          <p className="text-xs text-green-600">+0.5% vs ayer</p>
+      <header className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Dashboards</h1>
+          <p className="text-sm text-gray-500">
+            Crea y gestiona tus paneles personalizados.
+          </p>
         </div>
+        <button
+          onClick={createDashboard}
+          className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600"
+        >
+          <PlusCircle className="w-4 h-4" />
+          Crear Dashboard
+        </button>
+      </header>
 
-        <div className="card flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-500">Tickets abiertos</span>
-            <Activity className="w-4 h-4 text-orange-500" />
-          </div>
-          <h2 className="text-2xl font-semibold">22</h2>
-          <p className="text-xs text-red-600">-2 desde ayer</p>
-        </div>
-
-        <div className="card flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-500">Tiempo medio de respuesta</span>
-            <Clock className="w-4 h-4 text-orange-500" />
-          </div>
-          <h2 className="text-2xl font-semibold">1h 25min</h2>
-          <p className="text-xs text-gray-500">Objetivo: &lt; 1h</p>
-        </div>
-
-        <div className="card flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-500">Eficiencia global</span>
-            <TrendingUp className="w-4 h-4 text-orange-500" />
-          </div>
-          <h2 className="text-2xl font-semibold">92%</h2>
-          <p className="text-xs text-green-600">+4% semana pasada</p>
-        </div>
-      </div>
-
-      {/* Section 2 — Activity Overview */}
-      <div className="card">
-        <h2 className="text-lg font-semibold mb-4">Actividad reciente</h2>
-        <ul className="divide-y divide-gray-100">
-          <li className="py-2 text-sm text-gray-700 flex justify-between">
-            <span>Ticket #302 resuelto por Laura</span>
-            <span className="text-gray-400">Hace 2h</span>
-          </li>
-          <li className="py-2 text-sm text-gray-700 flex justify-between">
-            <span>Nuevo cliente: NovaTech</span>
-            <span className="text-gray-400">Hace 4h</span>
-          </li>
-          <li className="py-2 text-sm text-gray-700 flex justify-between">
-            <span>Actualización de integración con HubSpot</span>
-            <span className="text-gray-400">Hace 6h</span>
-          </li>
-        </ul>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {dashboards.map((d: any) => (
+          <a
+            key={d.dashboard_id}
+            href={`/dashboard/${d.dashboard_id}`}
+            className="card p-4 hover:shadow-md transition"
+          >
+            <div className="flex items-center gap-3 mb-2">
+              <LayoutDashboard className="text-orange-500" />
+              <h2 className="font-medium">{d.title}</h2>
+            </div>
+            <p className="text-sm text-gray-500">{d.description || 'Sin descripción'}</p>
+          </a>
+        ))}
       </div>
     </section>
   );

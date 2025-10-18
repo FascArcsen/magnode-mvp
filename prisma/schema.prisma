@@ -1,116 +1,249 @@
+// ==========================================
+// PRISMA SCHEMA - SQLite Compatible
+// ==========================================
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
 generator client {
   provider = "prisma-client-js"
 }
 
-datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
-}
-
-//
-// ============================================================
-// 🔗 MAIN ENTITY: PLATFORM CONNECTIONS
-// ============================================================
-// Cada registro representa una conexión OAuth o API configurada
-// por una organización con un proveedor (Slack, Google, HubSpot, etc.)
-//
+// ==========================================
+// PLATFORM CONNECTIONS
+// ==========================================
 model platform_connections {
-  connection_id            String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  connection_id            String    @id @default(uuid())
   org_id                   String
   platform_type            String
   platform_name            String
-  auth_config              Json?
-  connector_config         Json?
-  status                   String?   @default("inactive") // inactive | active | error
-  last_sync_at             DateTime? @db.Timestamptz(6)
-  next_sync_at             DateTime? @db.Timestamptz(6)
-  sync_frequency_minutes   Int?      @default(60)
+  status                   String?   @default("inactive")
+  last_sync_at             DateTime?
+  next_sync_at             DateTime?
   total_records_synced     Int?      @default(0)
   total_audit_logs_created Int?      @default(0)
+  sync_frequency_minutes   Int?      @default(60)
+  auth_config              Json
+  connector_config         Json
   error_message            String?
-  created_at               DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at               DateTime? @default(now()) @updatedAt @db.Timestamptz(6)
+  created_at               DateTime  @default(now())
+  updated_at               DateTime  @updatedAt
 
-  // Relaciones
-  raw_platform_data   raw_platform_data[]
-  sync_results        sync_results[]
-  llm_assisted_configs llm_assisted_configs[]
-
-  // Índice único para evitar duplicados por proveedor
-  @@unique([org_id, platform_name])
+  @@index([org_id])
+  @@index([platform_type])
+  @@index([status])
+  @@map("platform_connections")
 }
 
-//
-// ============================================================
-// 🧩 RAW PLATFORM DATA
-// ============================================================
-// Datos crudos obtenidos durante las sincronizaciones de API.
-// Cada payload se almacena para trazabilidad y auditoría.
-//
+// ==========================================
+// RAW PLATFORM DATA
+// ==========================================
 model raw_platform_data {
-  raw_data_id         String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  connection_id       String?   @db.Uuid
-  endpoint_id         String
+  raw_data_id         String    @id @default(uuid())
+  connection_id       String?
+  data_source         String?
   raw_payload         Json
-  extracted_at        DateTime? @default(now()) @db.Timestamptz(6)
-  processed           Boolean?  @default(false)
+  extracted_at        DateTime  @default(now())
+  record_type         String?
   mapped_to_audit_log Boolean?  @default(false)
-  audit_log_ids       String[]  @db.Uuid
+  audit_log_ids       String?   // Stored as JSON string for SQLite
   processing_errors   Json?
-  created_at          DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime? @default(now()) @updatedAt @db.Timestamptz(6)
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @updatedAt
 
-  // Relación inversa
-  platform_connection platform_connections? @relation(fields: [connection_id], references: [connection_id], onDelete: Cascade)
+  @@index([connection_id])
+  @@index([record_type])
+  @@index([mapped_to_audit_log])
+  @@map("raw_platform_data")
 }
 
-//
-// ============================================================
-// 🔄 SYNC RESULTS
-// ============================================================
-// Registro de cada ejecución de sincronización
-// Incluye métricas de duración, estado, errores y estadísticas.
-//
+// ==========================================
+// SYNC RESULTS
+// ==========================================
 model sync_results {
-  sync_id        String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  connection_id  String?   @db.Uuid
-  started_at     DateTime? @default(now()) @db.Timestamptz(6)
-  completed_at   DateTime? @db.Timestamptz(6)
-  duration_ms    Int?
-  status         String?   @default("pending") // pending | running | success | failed
-  stats          Json?
+  sync_id        String    @id @default(uuid())
+  connection_id  String?
+  started_at     DateTime  @default(now())
+  completed_at   DateTime?
+  status         String?
+  records_synced Int?      @default(0)
+  incremental    Boolean?  @default(false)
   errors         Json?
-  created_at     DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at     DateTime? @default(now()) @updatedAt @db.Timestamptz(6)
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
 
-  // Relación inversa
-  platform_connection platform_connections? @relation(fields: [connection_id], references: [connection_id], onDelete: Cascade)
+  @@index([connection_id])
+  @@index([status])
+  @@map("sync_results")
 }
 
-//
-// ============================================================
-// 🤖 LLM-ASSISTED CONFIGS
-// ============================================================
-// Configuraciones sugeridas por IA (Claude / Anthropic)
-// para generar automáticamente mappings de APIs.
-//
+// ==========================================
+// LLM ASSISTED CONFIGS
+// ==========================================
 model llm_assisted_configs {
-  config_id         String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
-  connection_id     String?  @db.Uuid
-  input             String
-  suggested_config  Json?
-  confidence_score  Float?
-  warnings          Json?
-  suggestions       Json?
-  status            String?  @default("draft") // draft | validated | rejected
-  user_approved     Boolean  @default(false)
-  llm_model         String?
+  config_id         String   @id @default(uuid())
+  connection_id     String?
+  llm_provider      String?
+  model_used        String?
+  prompt_sent       String?
+  llm_response      Json?
+  generated_config  Json?
+  validation_status String?
+  error_logs        Json?
   prompt_tokens     Int?
   completion_tokens Int?
-  created_at        DateTime @default(now()) @db.Timestamptz(6)
-  updated_at        DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
 
-  // Relación inversa
-  platform_connection platform_connections? @relation(fields: [connection_id], references: [connection_id], onDelete: SetNull)
+  @@index([connection_id])
+  @@map("llm_assisted_configs")
+}
+
+// ==========================================
+// OAUTH TOKENS
+// ==========================================
+model oauth_tokens {
+  token_id       String    @id @default(uuid())
+  org_id         String
+  provider       String
+  access_token   String
+  refresh_token  String?
+  token_type     String?
+  expires_at     DateTime?
+  scope          String?
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+
+  @@unique([org_id, provider])
+  @@index([org_id])
+  @@index([provider])
+  @@map("oauth_tokens")
+}
+
+// ==========================================
+// AUDIT LOGS
+// ==========================================
+model audit_logs {
+  log_id         String   @id @default(uuid())
+  org_id         String
+  connection_id  String
+  event_type     String
+  event_source   String
+  user_id        String?
+  metadata       String   // JSON stored as string
+  raw_event_data String?  // JSON stored as string
+  timestamp      DateTime @default(now())
+  created_at     DateTime @default(now())
+
+  @@index([org_id])
+  @@index([connection_id])
+  @@index([event_type])
+  @@index([timestamp])
+  @@map("audit_logs")
+}
+
+// ========================================
+// MAPEOS AUTOMÁTICOS (AUDIT RUN LOGS)
+// ========================================
+model audit_run_logs {
+  run_id            String   @id @default(uuid())
+  status            String
+  records_processed Int
+  error_message     String?
+  started_at        DateTime @default(now())
+  finished_at       DateTime
+  duration_ms       Int
+
+  @@map("audit_run_logs")
+}
+
+// =====================================================
+// CONTEXT ENGINE MODELS (AI-CONTEXTUALIZATION)
+// =====================================================
+
+// Representa cualquier entidad inteligente dentro del sistema:
+// persona, equipo, proyecto, producto, concepto, etc.
+model entity_nodes {
+  node_id       String   @id @default(uuid())
+  org_id        String
+  name          String
+  type          String   // e.g. "user", "team", "project", "topic"
+  description   String?
+  source        String   // Plataforma o contexto (Slack, Google, AI)
+  relevance     Float    @default(0)
+  metadata      Json?
+  created_at    DateTime @default(now())
+  updated_at    DateTime @default(now())
+
+  @@index([org_id])
+  @@index([type])
+  @@map("entity_nodes")
+}
+
+// Representa las relaciones entre entidades
+model relations_map {
+  relation_id   String   @id @default(uuid())
+  source_node   String
+  target_node   String
+  relation_type String   // e.g. "collaborates_with", "references", "depends_on"
+  weight        Float    @default(1)
+  context_label String?
+  created_at    DateTime @default(now())
+
+  @@index([source_node])
+  @@index([target_node])
+  @@map("relations_map")
+}
+
+// Define cómo deben representarse las páginas dinámicas o dashboards
+model page_configs {
+  page_id       String   @id @default(uuid())
+  org_id        String
+  title         String
+  type          String   // e.g. "dashboard", "team_view", "entity_profile"
+  layout        Json?    // Estructura visual
+  parameters    Json?    // Variables IA / métricas contextuales
+  related_nodes Json?    // IDs de nodos relevantes
+  generated_by  String?  // "system" | "AI"
+  created_at    DateTime @default(now())
+  updated_at    DateTime @default(now())
+
+  @@index([org_id])
+  @@index([type])
+  @@map("page_configs")
+}
+
+// =====================================================
+// Dashboard Page Model
+// =====================================================
+
+model dashboards {
+  dashboard_id  String   @id @default(uuid())
+  org_id        String
+  title         String
+  description   String?
+  created_by    String
+  layout_config Json     // posición de widgets o gráficos
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  reports       report[] @relation("DashboardReports")
+}
+
+model report {
+  report_id     String   @id @default(uuid())
+  org_id        String
+  dashboard_id  String?
+  name          String
+  type          String   // e.g. "bar", "line", "pie"
+  data_source   String   // e.g. "audit_logs", "entity_nodes"
+  query_config  Json     // propiedades o parámetros
+  visualization Json     // configuración visual (colores, labels)
+  created_by    String
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  dashboard     dashboards? @relation("DashboardReports", fields: [dashboard_id], references: [dashboard_id])
 }

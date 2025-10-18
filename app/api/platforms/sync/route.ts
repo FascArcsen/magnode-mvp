@@ -1,28 +1,35 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { ConnectorManager } from '@/lib/connectors/connector-manager';
+import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import type { PlatformConnection, PlatformType } from '@/types/connectors';
+import { TokenManager } from '@/lib/oauth/token-manager';
 
-// Inicializa el manager
-const connectorManager = new ConnectorManager(process.env.ANTHROPIC_API_KEY || '');
+/**
+ * 🔄 Sincronización de datos de plataformas conectadas
+ * 
+ * Soporta todos los tipos de conectores:
+ * - Pre-built OAuth (Google, Slack, etc.)
+ * - Universal Connectors
+ * - AI-Assisted Connectors
+ */
 
-// ==========================================
-// POST /api/platforms/sync - Ejecuta sincronización
-// ==========================================
-export async function POST(request: NextRequest) {
+export async function POST(req: Request) {
+  const startTime = Date.now();
+
   try {
-    const body = await request.json();
-    const { connection_id, incremental } = body;
+    const { connection_id, incremental = false } = await req.json();
 
-    // Validación básica
     if (!connection_id) {
       return NextResponse.json(
-        { success: false, error: 'Connection ID required' },
+        { success: false, error: 'connection_id is required' },
         { status: 400 }
       );
     }
 
-    // Busca la conexión en la base de datos
+    console.log(`🔄 Starting sync for connection: ${connection_id}`);
+    console.log(`📊 Incremental: ${incremental}`);
+
+    // =========================================
+    // 1. OBTENER CONEXIÓN DE LA BD
+    // =========================================
     const connection = await prisma.platform_connections.findUnique({
       where: { connection_id },
     });
@@ -34,126 +41,225 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Valida que la conexión esté activa
-    if (connection.status !== 'active') {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: `Connection is ${connection.status}. Only active connections can be synced.` 
-        },
-        { status: 400 }
-      );
-    }
+    // =========================================
+    // 2. PARSEAR CONFIGURACIÓN
+    // =========================================
+    const authConfig = JSON.parse(connection.auth_config as string);
+    const connectorConfig = JSON.parse(connection.connector_config as string);
 
-    // Define fecha de inicio para sincronización incremental
-    const since = incremental && connection.last_sync_at
-      ? new Date(connection.last_sync_at)
-      : undefined;
+    console.log(`📡 Platform: ${connection.platform_name}`);
+    console.log(`🔐 Auth type: ${authConfig.type}`);
 
-    // Parsea campos JSON de forma segura
-    let parsedAuth;
-    let parsedConnectorConfig;
-    
-    try {
-      parsedAuth = typeof connection.auth_config === 'string' 
-        ? JSON.parse(connection.auth_config)
-        : (connection.auth_config || {});
-      
-      parsedConnectorConfig = typeof connection.connector_config === 'string'
-        ? JSON.parse(connection.connector_config)
-        : (connection.connector_config || {});
-    } catch (parseError) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid connection configuration' },
-        { status: 400 }
-      );
-    }
-
-    // Construye el objeto de conexión para el manager
-    const connectionForSync: PlatformConnection = {
-      connection_id: connection.connection_id,
-      org_id: connection.org_id,
-      platform_type: connection.platform_type as PlatformType,
-      platform_name: connection.platform_name,
-      auth_config: parsedAuth,
-      connector_config: parsedConnectorConfig,
-      status: connection.status as any,
-      last_sync_at: connection.last_sync_at?.toISOString(),
-      next_sync_at: connection.next_sync_at?.toISOString(),
-      sync_frequency_minutes: connection.sync_frequency_minutes || 60,
-      total_records_synced: connection.total_records_synced || 0,
-      total_audit_logs_created: connection.total_audit_logs_created || 0,
-      error_message: connection.error_message || undefined,
-      created_at: connection.created_at?.toISOString() || new Date().toISOString(),
-      updated_at: connection.updated_at?.toISOString() || new Date().toISOString()
+    // =========================================
+    // 3. PREPARAR AUTENTICACIÓN
+    // =========================================
+    let authHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
     };
 
-    // ==========================================
-    // Ejecuta la sincronización
-    // ==========================================
-    const syncResult = await connectorManager.syncConnection(
-      connection_id,
-      connectionForSync,
-      since
-    );
+    // Desencriptar credenciales según el tipo
+    try {
+      switch (authConfig.type) {
+        case 'oauth2':
+          // Para OAuth, obtener tokens de la tabla oauth_tokens
+          const tokens = await prisma.oauth_tokens.findFirst({
+            where: {
+              org_id: connection.org_id,
+              provider: authConfig.provider,
+            },
+          });
 
-    // Convierte a JSON-safe para Prisma
-    const safeStats = JSON.parse(JSON.stringify(syncResult.stats || {}));
-    const safeErrors = JSON.parse(JSON.stringify(syncResult.errors || []));
+          if (!tokens) {
+            throw new Error(`OAuth tokens not found for ${authConfig.provider}`);
+          }
 
-    // ==========================================
-    // Guarda el resultado
-    // ==========================================
-    const savedSync = await prisma.sync_results.create({
-      data: {
-        connection_id,
-        duration_ms: syncResult.duration_ms || 0,
-        status: syncResult.status || 'completed',
-        stats: safeStats,
-        errors: safeErrors,
-      },
-    });
+          const accessToken = TokenManager.decrypt(tokens.access_token);
+          authHeaders['Authorization'] = `Bearer ${accessToken}`;
+          break;
 
-    // ==========================================
-    // Actualiza la conexión
-    // ==========================================
+        case 'bearer':
+          const bearerToken = TokenManager.decrypt(
+            authConfig.credentials.bearer_token
+          );
+          authHeaders['Authorization'] = `Bearer ${bearerToken}`;
+          break;
+
+        case 'api_key':
+          const apiKey = TokenManager.decrypt(authConfig.credentials.api_key);
+          // Puede variar según la API: X-API-Key, api_key, etc.
+          authHeaders['X-API-Key'] = apiKey;
+          authHeaders['Authorization'] = `Bearer ${apiKey}`; // Algunos usan ambos
+          break;
+
+        case 'basic':
+          const username = authConfig.credentials.username;
+          const password = TokenManager.decrypt(authConfig.credentials.password);
+          const basicAuth = Buffer.from(`${username}:${password}`).toString('base64');
+          authHeaders['Authorization'] = `Basic ${basicAuth}`;
+          break;
+
+        default:
+          console.warn(`⚠️ Unknown auth type: ${authConfig.type}`);
+      }
+    } catch (decryptError: any) {
+      console.error('❌ Failed to decrypt credentials:', decryptError);
+      
+      await prisma.platform_connections.update({
+        where: { connection_id },
+        data: {
+          status: 'error',
+          error_message: 'Invalid or expired credentials',
+        },
+      });
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Failed to decrypt credentials. Please reconnect the platform.',
+        },
+        { status: 401 }
+      );
+    }
+
+    // =========================================
+    // 4. SINCRONIZAR CADA ENDPOINT
+    // =========================================
+    const endpoints = connectorConfig.endpoints || [];
+    let totalRecordsSynced = 0;
+    const syncErrors: any[] = [];
+    const syncedData: any[] = [];
+
+    console.log(`📋 Syncing ${endpoints.length} endpoints...`);
+
+    for (const endpoint of endpoints) {
+      try {
+        console.log(`  → ${endpoint.method} ${endpoint.path}`);
+
+        const url = `${connectorConfig.base_url}${endpoint.path}`;
+
+        const response = await fetch(url, {
+          method: endpoint.method || 'GET',
+          headers: authHeaders,
+        });
+
+        if (!response.ok) {
+          throw new Error(
+            `HTTP ${response.status}: ${response.statusText}`
+          );
+        }
+
+        const data = await response.json();
+
+        // Determinar cuántos registros se obtuvieron
+        let recordCount = 0;
+        if (Array.isArray(data)) {
+          recordCount = data.length;
+        } else if (data.data && Array.isArray(data.data)) {
+          recordCount = data.data.length;
+        } else if (data.items && Array.isArray(data.items)) {
+          recordCount = data.items.length;
+        } else {
+          recordCount = 1; // Single object
+        }
+
+        console.log(`    ✅ Fetched ${recordCount} records`);
+
+        // Guardar en raw_platform_data
+        await prisma.raw_platform_data.create({
+          data: {
+            connection_id,
+            data_source: endpoint.name || endpoint.path,
+            raw_payload: JSON.stringify(data),
+            extracted_at: new Date(),
+            record_type: endpoint.name || 'unknown',
+            mapped_to_audit_log: false,
+          },
+        });
+
+        totalRecordsSynced += recordCount;
+        syncedData.push({
+          endpoint: endpoint.name,
+          records: recordCount,
+          status: 'success',
+        });
+
+      } catch (endpointError: any) {
+        console.error(`    ❌ Error: ${endpointError.message}`);
+        syncErrors.push({
+          endpoint: endpoint.name,
+          error: endpointError.message,
+        });
+      }
+    }
+
+    // =========================================
+    // 5. ACTUALIZAR ESTADO DE LA CONEXIÓN
+    // =========================================
+    const syncStatus = syncErrors.length > 0 ? 'error' : 'active';
+    const errorMessage = syncErrors.length > 0
+      ? `Failed to sync ${syncErrors.length} endpoint(s)`
+      : null;
+
     await prisma.platform_connections.update({
       where: { connection_id },
       data: {
+        status: syncStatus,
         last_sync_at: new Date(),
-        next_sync_at: syncResult.next_sync_at 
-          ? new Date(syncResult.next_sync_at) 
-          : undefined,
         total_records_synced: {
-          increment: syncResult.stats.total_records_processed
+          increment: totalRecordsSynced,
         },
-        total_audit_logs_created: {
-          increment: syncResult.stats.audit_logs_created
-        },
-        status: syncResult.status === 'failed' ? 'error' : 'active',
-        error_message: syncResult.status === 'failed' 
-          ? syncResult.errors?.[0]?.error_message 
-          : null
-      }
+        error_message: errorMessage,
+        updated_at: new Date(),
+      },
     });
 
-    // ==========================================
-    // Respuesta final
-    // ==========================================
-    return NextResponse.json(
-      { success: true, data: savedSync },
-      { status: 201 }
-    );
+    // =========================================
+    // 6. CREAR REGISTRO EN SYNC_RESULTS
+    // =========================================
+    const duration = Date.now() - startTime;
+
+    await prisma.sync_results.create({
+      data: {
+        connection_id,
+        started_at: new Date(startTime),
+        completed_at: new Date(),
+        status: syncStatus,
+        records_synced: totalRecordsSynced,
+        incremental,
+        ...(syncErrors.length > 0 && { errors: JSON.stringify(syncErrors) }),
+      },
+    });
+
+    // =========================================
+    // 7. RESPUESTA
+    // =========================================
+    console.log(`✅ Sync completed in ${duration}ms`);
+    console.log(`📊 Total records: ${totalRecordsSynced}`);
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        connection_id,
+        platform_name: connection.platform_name,
+        status: syncStatus,
+        stats: {
+          total_records_synced: totalRecordsSynced,
+          endpoints_synced: endpoints.length - syncErrors.length,
+          endpoints_failed: syncErrors.length,
+          duration_ms: duration,
+        },
+        synced_endpoints: syncedData,
+        errors: syncErrors.length > 0 ? syncErrors : undefined,
+      },
+    });
 
   } catch (error: any) {
-    console.error('❌ [POST /sync] Error:', error);
-    console.error('Stack:', error.stack);
-    
+    console.error('❌ Sync error:', error);
+
     return NextResponse.json(
-      { 
-        success: false, 
-        error: error.message,
-        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      {
+        success: false,
+        error: error.message || 'Sync failed',
       },
       { status: 500 }
     );

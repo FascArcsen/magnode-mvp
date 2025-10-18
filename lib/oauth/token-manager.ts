@@ -1,3 +1,4 @@
+import 'server-only';
 import crypto from "crypto";
 
 const ENCRYPTION_KEY = Buffer.from(
