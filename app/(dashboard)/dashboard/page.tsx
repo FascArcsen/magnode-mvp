@@ -3,8 +3,19 @@
 import { useEffect, useState } from 'react';
 import { PlusCircle, LayoutDashboard } from 'lucide-react';
 
+interface Dashboard {
+  dashboard_id: string;
+  org_id?: string;
+  title: string;
+  description?: string;
+  created_by?: string;
+  layout_config?: any;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export default function DashboardList() {
-  const [dashboards, setDashboards] = useState([]);
+  const [dashboards, setDashboards] = useState<Dashboard[]>([]);
 
   useEffect(() => {
     fetch('/api/dashboard')
@@ -43,7 +54,7 @@ export default function DashboardList() {
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {dashboards.map((d: any) => (
+        {dashboards.map((d) => (
           <a
             key={d.dashboard_id}
             href={`/dashboard/${d.dashboard_id}`}
@@ -53,7 +64,9 @@ export default function DashboardList() {
               <LayoutDashboard className="text-orange-500" />
               <h2 className="font-medium">{d.title}</h2>
             </div>
-            <p className="text-sm text-gray-500">{d.description || 'Sin descripción'}</p>
+            <p className="text-sm text-gray-500">
+              {d.description || 'Sin descripción'}
+            </p>
           </a>
         ))}
       </div>

@@ -3,12 +3,12 @@
 // Manage raw data ingestion and sync results
 // ==========================================
 
-import { prisma } from '../prisma'
+import { prisma } from "../prisma"
 
 // Save raw data payload
 export async function saveRawPlatformData(data: {
   connection_id: string
-  endpoint_id: string
+  endpoint_id?: string
   raw_payload: any
   processed?: boolean
   mapped_to_audit_log?: boolean
@@ -19,18 +19,20 @@ export async function saveRawPlatformData(data: {
     const record = await prisma.raw_platform_data.create({
       data: {
         connection_id: data.connection_id,
-        endpoint_id: data.endpoint_id,
+        endpoint_id: data.endpoint_id ?? null,
         raw_payload: data.raw_payload,
         processed: data.processed ?? false,
         mapped_to_audit_log: data.mapped_to_audit_log ?? false,
-        audit_log_ids: data.audit_log_ids ?? [],
+        audit_log_ids: data.audit_log_ids
+          ? JSON.stringify(data.audit_log_ids)
+          : "[]",
         processing_errors: data.processing_errors ?? {},
       },
     })
     return record
   } catch (error) {
-    console.error('❌ Error saving raw platform data:', error)
-    throw new Error('Failed to save raw platform data.')
+    console.error("❌ Error saving raw platform data:", error)
+    throw new Error("Failed to save raw platform data.")
   }
 }
 
@@ -54,8 +56,8 @@ export async function saveSyncResult(data: {
     })
     return result
   } catch (error) {
-    console.error('❌ Error saving sync result:', error)
-    throw new Error('Failed to save sync result.')
+    console.error("❌ Error saving sync result:", error)
+    throw new Error("Failed to save sync result.")
   }
 }
 
@@ -64,12 +66,12 @@ export async function getLastSyncResults(connection_id: string, limit = 10) {
   try {
     const results = await prisma.sync_results.findMany({
       where: { connection_id },
-      orderBy: { started_at: 'desc' },
+      orderBy: { started_at: "desc" },
       take: limit,
     })
     return results
   } catch (error) {
-    console.error('❌ Error fetching sync results:', error)
-    throw new Error('Failed to fetch sync results.')
+    console.error("❌ Error fetching sync results:", error)
+    throw new Error("Failed to fetch sync results.")
   }
 }

@@ -1,14 +1,14 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { OAUTH_PROVIDERS, OAuthProviderKey } from "@/config/oauth-providers";
 
 /**
  * Genera la URL de autorización OAuth dinámica
  */
 export async function GET(
-  req: Request,
-  context: { params: { provider: string } }
+  request: NextRequest,
+  context: { params: Promise<{ provider: string }> }
 ) {
-  const { provider } = context.params;
+  const { provider } = await context.params;
 
   if (!(provider in OAUTH_PROVIDERS)) {
     return NextResponse.json(
@@ -22,8 +22,8 @@ export async function GET(
   // ✅ Detectar dominio base dinámico
   const rawHost =
     process.env.NEXT_PUBLIC_APP_URL ||
-    req.headers.get("x-forwarded-host") ||
-    req.headers.get("host") ||
+    request.headers.get("x-forwarded-host") ||
+    request.headers.get("host") ||
     "localhost:3000";
 
   const baseUrl = rawHost.startsWith("http")

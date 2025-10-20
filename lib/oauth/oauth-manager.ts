@@ -1,6 +1,6 @@
 /**
  * OAuthManager — MagNode MVP
- * Optimizado para trabajar con el schema actual de Prisma
+ * Versión corregida y alineada con schema.prisma (SQLite)
  */
 
 import { OAUTH_PROVIDERS, OAuthProviderKey } from "@/config/oauth-providers";
@@ -18,21 +18,20 @@ export interface OAuthTokenResponse {
 
 export class OAuthManager {
   /**
-   * Genera la URL de autorización
+   * Genera la URL de autorización dinámica
    */
   static getAuthUrl(provider: OAuthProviderKey, orgId: string): string {
     const config = OAUTH_PROVIDERS[provider];
     if (!config) throw new Error(`Provider ${provider} not supported`);
 
-    // ✅ Genera un state token único con el org_id embebido
     const state = Buffer.from(
       JSON.stringify({
         org_id: orgId,
         provider,
         timestamp: Date.now(),
-        nonce: Math.random().toString(36).slice(2)
+        nonce: Math.random().toString(36).slice(2),
       })
-    ).toString('base64');
+    ).toString("base64");
 
     const params = new URLSearchParams({
       client_id: config.client_id,
@@ -41,14 +40,14 @@ export class OAuthManager {
       scope: config.scopes.join(" "),
       access_type: "offline",
       prompt: "consent",
-      state
+      state,
     });
 
     return `${config.auth_url}?${params.toString()}`;
   }
 
   /**
-   * Intercambia el código por tokens
+   * Intercambia el código de autorización por tokens
    */
   static async exchangeCodeForToken(
     provider: OAuthProviderKey,
@@ -80,36 +79,37 @@ export class OAuthManager {
   }
 
   /**
-   * ✅ Guarda tokens usando el schema actual (sin modificaciones)
+   * Guarda o actualiza tokens en DB
    */
   static async saveTokensToDB(
     provider: OAuthProviderKey,
     org_id: string,
     tokens: OAuthTokenResponse
   ) {
-    // Encriptar tokens
+    if (!OAUTH_PROVIDERS[provider]) {
+      throw new Error(`Invalid provider: ${provider}`);
+    }
+
     const encryptedAccessToken = TokenManager.encrypt(tokens.access_token);
     const encryptedRefreshToken = tokens.refresh_token
       ? TokenManager.encrypt(tokens.refresh_token)
       : null;
 
-    // Calcular fecha de expiración
     const expiresAt = tokens.expires_in
-      ? new Date(Date.now() + tokens.expires_in * 1000)
+      ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
       : null;
 
-    // ✅ Usar el schema actual - auth_config almacena todo
     const authConfig = {
       access_token: encryptedAccessToken,
       refresh_token: encryptedRefreshToken,
       expires_in: tokens.expires_in || 3600,
-      expires_at: expiresAt?.toISOString(),
+      expires_at: expiresAt,
       token_type: tokens.token_type || "Bearer",
       scope: tokens.scope || OAUTH_PROVIDERS[provider].scopes.join(" "),
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
     };
 
-    // ✅ Upsert usando el índice único existente
+    // ⚙️ Actualiza o crea la conexión asociada
     const connection = await prisma.platform_connections.upsert({
       where: {
         org_id_platform_name: {
@@ -120,7 +120,7 @@ export class OAuthManager {
       update: {
         status: "active",
         auth_config: authConfig,
-        error_message: null, // Limpiar errores previos
+        error_message: null,
         updated_at: new Date(),
       },
       create: {
@@ -129,13 +129,32 @@ export class OAuthManager {
         platform_name: provider,
         status: "active",
         auth_config: authConfig,
-        connector_config: {
-          connector_type: provider,
-          version: "1.0"
-        },
+        connector_config: { connector_type: provider, version: "1.0" },
         sync_frequency_minutes: 60,
         total_records_synced: 0,
         total_audit_logs_created: 0,
+      },
+    });
+
+    // ⚙️ Registrar token en tabla oauth_tokens (para auditoría global)
+    await prisma.oauth_tokens.upsert({
+      where: { org_id_provider: { org_id, provider } },
+      update: {
+        access_token: encryptedAccessToken,
+        refresh_token: encryptedRefreshToken,
+        token_type: tokens.token_type || "Bearer",
+        expires_at: expiresAt ? new Date(expiresAt) : null,
+        scope: tokens.scope,
+        updated_at: new Date(),
+      },
+      create: {
+        org_id,
+        provider,
+        access_token: encryptedAccessToken,
+        refresh_token: encryptedRefreshToken,
+        token_type: tokens.token_type || "Bearer",
+        expires_at: expiresAt ? new Date(expiresAt) : null,
+        scope: tokens.scope,
       },
     });
 
@@ -143,48 +162,39 @@ export class OAuthManager {
   }
 
   /**
-   * ✅ Verifica si el token está expirado
+   * Comprueba si el token expiró (considerando 5 minutos de margen)
    */
   static isTokenExpired(connection: any): boolean {
-    if (!connection?.auth_config) return true;
-    
-    const authConfig = connection.auth_config as any;
-    if (!authConfig.expires_at) return false; // Si no hay fecha, asumir válido
-    
-    const expiresAt = new Date(authConfig.expires_at);
-    const now = new Date();
-    
-    // Considerar expirado si faltan menos de 5 minutos
-    const bufferMs = 5 * 60 * 1000;
-    return expiresAt.getTime() - now.getTime() < bufferMs;
+    const authConfig = connection?.auth_config;
+    if (!authConfig?.expires_at) return false;
+
+    const expiresAt = new Date(authConfig.expires_at).getTime();
+    const now = Date.now();
+    const buffer = 5 * 60 * 1000;
+
+    return expiresAt - now < buffer;
   }
 
   /**
-   * ✅ Renueva un token expirado
+   * Renueva un token expirado
    */
   static async refreshToken(
     provider: OAuthProviderKey,
     connectionId: string
   ): Promise<OAuthTokenResponse> {
-    // Obtener conexión actual
     const connection = await prisma.platform_connections.findUnique({
-      where: { connection_id: connectionId }
+      where: { connection_id: connectionId },
     });
 
-    if (!connection?.auth_config) {
-      throw new Error("No auth config found");
-    }
+    if (!connection?.auth_config) throw new Error("No auth config found");
 
     const authConfig = connection.auth_config as any;
-    if (!authConfig.refresh_token) {
+    if (!authConfig.refresh_token)
       throw new Error("No refresh token available");
-    }
 
-    // Desencriptar refresh token
     const refreshToken = TokenManager.decrypt(authConfig.refresh_token);
-
-    // Llamar al proveedor
     const config = OAUTH_PROVIDERS[provider];
+
     const body = new URLSearchParams({
       client_id: config.client_id,
       client_secret: config.client_secret,
@@ -200,65 +210,48 @@ export class OAuthManager {
 
     if (!response.ok) {
       const errorText = await response.text();
-      
-      // ✅ Marcar conexión como error
+
       await prisma.platform_connections.update({
         where: { connection_id: connectionId },
         data: {
           status: "error",
           error_message: `Token refresh failed: ${errorText}`,
-          updated_at: new Date()
-        }
+          updated_at: new Date(),
+        },
       });
 
       throw new Error(`Failed to refresh token: ${errorText}`);
     }
 
     const newTokens = await response.json();
-
-    // ✅ Guardar nuevos tokens
-    await this.saveTokensToDB(
-      provider,
-      connection.org_id,
-      newTokens
-    );
+    await this.saveTokensToDB(provider, connection.org_id, newTokens);
 
     return newTokens;
   }
 
   /**
-   * ✅ Obtiene tokens desencriptados (con auto-refresh si es necesario)
+   * Obtiene tokens válidos (auto-refresh incluido)
    */
   static async getValidTokens(connectionId: string): Promise<{
     access_token: string;
     token_type: string;
   }> {
     const connection = await prisma.platform_connections.findUnique({
-      where: { connection_id: connectionId }
+      where: { connection_id: connectionId },
     });
 
-    if (!connection) {
-      throw new Error("Connection not found");
-    }
+    if (!connection) throw new Error("Connection not found");
 
-    // Verificar si el token está expirado
     if (this.isTokenExpired(connection)) {
       console.log("Token expired, refreshing...");
       await this.refreshToken(
         connection.platform_name as OAuthProviderKey,
         connectionId
       );
-
-      // Recargar la conexión con el nuevo token
-      const refreshedConnection = await prisma.platform_connections.findUnique({
-        where: { connection_id: connectionId }
+      const refreshed = await prisma.platform_connections.findUnique({
+        where: { connection_id: connectionId },
       });
-
-      if (!refreshedConnection) {
-        throw new Error("Failed to reload connection");
-      }
-
-      connection.auth_config = refreshedConnection.auth_config;
+      if (refreshed) connection.auth_config = refreshed.auth_config;
     }
 
     const authConfig = connection.auth_config as any;
@@ -266,7 +259,7 @@ export class OAuthManager {
 
     return {
       access_token: accessToken,
-      token_type: authConfig.token_type || "Bearer"
+      token_type: authConfig.token_type || "Bearer",
     };
   }
 }

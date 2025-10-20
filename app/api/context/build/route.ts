@@ -15,15 +15,21 @@ export async function POST() {
     });
 
     if (!logs.length) {
-      return NextResponse.json({ success: false, message: "No hay audit_logs para procesar." });
+      return NextResponse.json({
+        success: false,
+        message: "No hay audit_logs para procesar.",
+      });
     }
 
-    // 2️⃣ Prepara datos para IA
+    // 2️⃣ Preparar datos para IA
     const contextText = logs
-      .map((l) => `[${l.event_source}] ${l.event_type} by ${l.user_id}: ${l.metadata}`)
+      .map(
+        (l) =>
+          `[${l.event_source}] ${l.event_type} by ${l.user_id}: ${l.metadata}`
+      )
       .join("\n");
 
-    // 3️⃣ Enviar a LLM para generar estructura de contexto
+    // 3️⃣ Crear prompt estructurado
     const prompt = `
 Analiza los siguientes eventos empresariales y crea:
 - Lista de entidades únicas (personas, equipos, proyectos, temas).
@@ -41,15 +47,34 @@ Eventos:
 ${contextText}
 `;
 
+    // 4️⃣ Llamar al modelo
     const completion = await openai.chat.completions.create({
       model: "gpt-4-turbo",
-      messages: [{ role: "system", content: "Eres un asistente experto en modelar sistemas organizacionales inteligentes." },
-                 { role: "user", content: prompt }],
+      messages: [
+        {
+          role: "system",
+          content:
+            "Eres un asistente experto en modelar sistemas organizacionales inteligentes.",
+        },
+        { role: "user", content: prompt },
+      ],
     });
 
-    const data = JSON.parse(completion.choices[0].message.content);
+    // ✅ Validar que la respuesta no sea nula
+    const content = completion.choices?.[0]?.message?.content;
+    if (!content) {
+      throw new Error("La respuesta del modelo está vacía o es inválida.");
+    }
 
-    // 4️⃣ Guardar en base de datos
+    let data;
+    try {
+      data = JSON.parse(content);
+    } catch (err) {
+      console.error("⚠️ Error al parsear la respuesta del modelo:", content);
+      throw new Error("El modelo devolvió un JSON inválido.");
+    }
+
+    // 5️⃣ Guardar en base de datos
     if (data.entities?.length) {
       await prisma.entity_nodes.createMany({
         data: data.entities.map((e: any) => ({
@@ -92,8 +117,11 @@ ${contextText}
 
     console.log("✅ IA Contextual completada correctamente");
     return NextResponse.json({ success: true, summary: data });
-  } catch (error) {
+  } catch (error: any) {
     console.error("❌ Error en IA Contextual:", error);
-    return NextResponse.json({ success: false, error: String(error) }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: String(error) },
+      { status: 500 }
+    );
   }
 }

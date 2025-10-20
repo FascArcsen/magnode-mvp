@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { OAUTH_PROVIDERS, OAuthProviderKey } from "@/config/oauth-providers";
 import OAuthManager from "@/lib/oauth/oauth-manager";
 
@@ -6,12 +6,12 @@ import OAuthManager from "@/lib/oauth/oauth-manager";
  * Maneja el callback de OAuth después de la autorización
  */
 export async function GET(
-  req: Request,
-  context: { params: { provider: string } }
+  request: NextRequest,
+  context: { params: Promise<{ provider: string }> }
 ) {
   try {
-    const { provider } = context.params;
-    const url = new URL(req.url);
+    const { provider } = await context.params;
+    const url = new URL(request.url);
 
     console.log("📥 OAuth Callback received:", {
       provider,
@@ -23,7 +23,9 @@ export async function GET(
     // 🧩 Manejar errores del proveedor
     const oauthError = url.searchParams.get("error");
     if (oauthError) {
-      const description = url.searchParams.get("error_description") || "Unknown error";
+      const description =
+        url.searchParams.get("error_description") || "Unknown error";
+
       console.error("❌ OAuth Error:", oauthError, description);
 
       return NextResponse.redirect(
@@ -67,8 +69,8 @@ export async function GET(
     // ✅ Detectar dominio base dinámico
     const rawHost =
       process.env.NEXT_PUBLIC_APP_URL ||
-      req.headers.get("x-forwarded-host") ||
-      req.headers.get("host") ||
+      request.headers.get("x-forwarded-host") ||
+      request.headers.get("host") ||
       "localhost:3000";
     const baseUrl = rawHost.startsWith("http")
       ? rawHost

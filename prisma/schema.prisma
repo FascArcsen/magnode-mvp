@@ -1,19 +1,12 @@
-// ==========================================
-// PRISMA SCHEMA - SQLite Compatible
-// ==========================================
+generator client {
+  provider = "prisma-client-js"
+}
 
 datasource db {
   provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
-generator client {
-  provider = "prisma-client-js"
-}
-
-// ==========================================
-// PLATFORM CONNECTIONS
-// ==========================================
 model platform_connections {
   connection_id            String    @id @default(uuid())
   org_id                   String
@@ -31,27 +24,27 @@ model platform_connections {
   created_at               DateTime  @default(now())
   updated_at               DateTime  @updatedAt
 
+  @@unique([org_id, platform_name])
   @@index([org_id])
   @@index([platform_type])
   @@index([status])
   @@map("platform_connections")
 }
 
-// ==========================================
-// RAW PLATFORM DATA
-// ==========================================
 model raw_platform_data {
-  raw_data_id         String    @id @default(uuid())
+  raw_data_id         String   @id @default(uuid())
   connection_id       String?
+  endpoint_id         String?
   data_source         String?
   raw_payload         Json
-  extracted_at        DateTime  @default(now())
-  record_type         String?
-  mapped_to_audit_log Boolean?  @default(false)
-  audit_log_ids       String?   // Stored as JSON string for SQLite
+  processed           Boolean? @default(false)
+  mapped_to_audit_log Boolean? @default(false)
+  audit_log_ids       String?
   processing_errors   Json?
-  created_at          DateTime  @default(now())
-  updated_at          DateTime  @updatedAt
+  extracted_at        DateTime @default(now())
+  record_type         String?
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
 
   @@index([connection_id])
   @@index([record_type])
@@ -59,17 +52,16 @@ model raw_platform_data {
   @@map("raw_platform_data")
 }
 
-// ==========================================
-// SYNC RESULTS
-// ==========================================
 model sync_results {
   sync_id        String    @id @default(uuid())
   connection_id  String?
   started_at     DateTime  @default(now())
   completed_at   DateTime?
   status         String?
-  records_synced Int?      @default(0)
+  records_synced Int?      @default(0)   // ✅ campo faltante
   incremental    Boolean?  @default(false)
+  duration_ms    Int?
+  stats          Json?
   errors         Json?
   created_at     DateTime  @default(now())
   updated_at     DateTime  @updatedAt
@@ -79,9 +71,6 @@ model sync_results {
   @@map("sync_results")
 }
 
-// ==========================================
-// LLM ASSISTED CONFIGS
-// ==========================================
 model llm_assisted_configs {
   config_id         String   @id @default(uuid())
   connection_id     String?
@@ -101,20 +90,17 @@ model llm_assisted_configs {
   @@map("llm_assisted_configs")
 }
 
-// ==========================================
-// OAUTH TOKENS
-// ==========================================
 model oauth_tokens {
-  token_id       String    @id @default(uuid())
-  org_id         String
-  provider       String
-  access_token   String
-  refresh_token  String?
-  token_type     String?
-  expires_at     DateTime?
-  scope          String?
-  created_at     DateTime  @default(now())
-  updated_at     DateTime  @updatedAt
+  token_id      String    @id @default(uuid())
+  org_id        String
+  provider      String
+  access_token  String
+  refresh_token String?
+  token_type    String?
+  expires_at    DateTime?
+  scope         String?
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
 
   @@unique([org_id, provider])
   @@index([org_id])
@@ -122,9 +108,6 @@ model oauth_tokens {
   @@map("oauth_tokens")
 }
 
-// ==========================================
-// AUDIT LOGS
-// ==========================================
 model audit_logs {
   log_id         String   @id @default(uuid())
   org_id         String
@@ -132,8 +115,8 @@ model audit_logs {
   event_type     String
   event_source   String
   user_id        String?
-  metadata       String   // JSON stored as string
-  raw_event_data String?  // JSON stored as string
+  metadata       String
+  raw_event_data String?
   timestamp      DateTime @default(now())
   created_at     DateTime @default(now())
 
@@ -144,9 +127,6 @@ model audit_logs {
   @@map("audit_logs")
 }
 
-// ========================================
-// MAPEOS AUTOMÁTICOS (AUDIT RUN LOGS)
-// ========================================
 model audit_run_logs {
   run_id            String   @id @default(uuid())
   status            String
@@ -159,35 +139,28 @@ model audit_run_logs {
   @@map("audit_run_logs")
 }
 
-// =====================================================
-// CONTEXT ENGINE MODELS (AI-CONTEXTUALIZATION)
-// =====================================================
-
-// Representa cualquier entidad inteligente dentro del sistema:
-// persona, equipo, proyecto, producto, concepto, etc.
 model entity_nodes {
-  node_id       String   @id @default(uuid())
-  org_id        String
-  name          String
-  type          String   // e.g. "user", "team", "project", "topic"
-  description   String?
-  source        String   // Plataforma o contexto (Slack, Google, AI)
-  relevance     Float    @default(0)
-  metadata      Json?
-  created_at    DateTime @default(now())
-  updated_at    DateTime @default(now())
+  node_id     String   @id @default(uuid())
+  org_id      String
+  name        String
+  type        String
+  description String?
+  source      String
+  relevance   Float    @default(0)
+  metadata    Json?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @default(now())
 
   @@index([org_id])
   @@index([type])
   @@map("entity_nodes")
 }
 
-// Representa las relaciones entre entidades
 model relations_map {
   relation_id   String   @id @default(uuid())
   source_node   String
   target_node   String
-  relation_type String   // e.g. "collaborates_with", "references", "depends_on"
+  relation_type String
   weight        Float    @default(1)
   context_label String?
   created_at    DateTime @default(now())
@@ -197,16 +170,15 @@ model relations_map {
   @@map("relations_map")
 }
 
-// Define cómo deben representarse las páginas dinámicas o dashboards
 model page_configs {
   page_id       String   @id @default(uuid())
   org_id        String
   title         String
-  type          String   // e.g. "dashboard", "team_view", "entity_profile"
-  layout        Json?    // Estructura visual
-  parameters    Json?    // Variables IA / métricas contextuales
-  related_nodes Json?    // IDs de nodos relevantes
-  generated_by  String?  // "system" | "AI"
+  type          String
+  layout        Json?
+  parameters    Json?
+  related_nodes Json?
+  generated_by  String?
   created_at    DateTime @default(now())
   updated_at    DateTime @default(now())
 
@@ -215,35 +187,36 @@ model page_configs {
   @@map("page_configs")
 }
 
-// =====================================================
-// Dashboard Page Model
-// =====================================================
-
 model dashboards {
   dashboard_id  String   @id @default(uuid())
   org_id        String
   title         String
   description   String?
   created_by    String
-  layout_config Json     // posición de widgets o gráficos
+  layout_config Json
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
-
   reports       report[] @relation("DashboardReports")
+
+  @@index([org_id])
+  @@map("dashboards")
 }
 
 model report {
-  report_id     String   @id @default(uuid())
+  report_id     String      @id @default(uuid())
   org_id        String
   dashboard_id  String?
   name          String
-  type          String   // e.g. "bar", "line", "pie"
-  data_source   String   // e.g. "audit_logs", "entity_nodes"
-  query_config  Json     // propiedades o parámetros
-  visualization Json     // configuración visual (colores, labels)
+  type          String
+  data_source   String
+  query_config  Json
+  visualization Json
   created_by    String
-  created_at    DateTime @default(now())
-  updated_at    DateTime @updatedAt
-
+  created_at    DateTime    @default(now())
+  updated_at    DateTime    @updatedAt
   dashboard     dashboards? @relation("DashboardReports", fields: [dashboard_id], references: [dashboard_id])
+
+  @@index([org_id])
+  @@index([type])
+  @@map("report")
 }
